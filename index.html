@@ -5073,6 +5073,7 @@ window.exportAsCSV = function() {
         <div class="tpi-sync-state"><span style="color:#888;font-size:12px;">已加载日期：<span id="tpi-loaded-date">未加载</span> · 数据来源：<span id="tpi-data-source">—</span></span></div>
 <div class="tpi-sync-buttons">
           <button type="button" onclick="tpiSaveToday()" class="tpi-btn tpi-btn-blue">⬆️ 同步所选日期到云端</button>
+          <button type="button" onclick="tpiLocalSave()" class="tpi-btn">💾 保存到本地</button>
           <button type="button" onclick="loadFromGist(getSelectedDate())" class="tpi-btn tpi-btn-cyan">⬇️ 从云端下载所选日期数据</button>
           <button type="button" onclick="tpiLogout()" class="tpi-btn tpi-btn-red">🚪 退出登录</button>
         </div>
@@ -29950,9 +29951,48 @@ function parseGistFileContent(gistJson){
     try{ updateAuthPanels(); }catch(e){}
   };
 
-  window.tpiSaveToday = async function(date){
+  
+  // --- Public API: tpiLocalSave (save current UI to localStorage) ---
+  window.tpiLocalSave = function(){
+    try{
+      // Prefer existing saver if already exposed
+      if (typeof window.saveToLocalStorage === 'function') {
+        window.saveToLocalStorage();
+        try{ tpiShowMsg('tpi-sync-msg','✅ 已保存到本地（localStorage）', false); }catch(e){}
+        return true;
+      }
+      // If saver exists in current scope but not exposed yet, expose and call it
+      try{
+        if (typeof saveToLocalStorage === 'function') {
+          window.saveToLocalStorage = saveToLocalStorage;
+          window.saveToLocalStorage();
+          try{ tpiShowMsg('tpi-sync-msg','✅ 已保存到本地（localStorage）', false); }catch(e){}
+          return true;
+        }
+      }catch(e){}
+      // Fallback: at least persist collected daily data under the same tpi_data_<date> key
+      const dateKey = (typeof getSelectedDate === 'function') ? getSelectedDate() : (document.getElementById('date-input')?.value || '');
+      const obj = (typeof window.collectDailyData === 'function') ? window.collectDailyData() : null;
+      const dayData = (obj && dateKey && obj[dateKey] && typeof obj[dateKey]==='object') ? obj[dateKey] : (obj || {});
+      const key = `tpi_data_${dateKey || 'unknown'}`;
+      const dataStr = JSON.stringify(dayData || {});
+      if (typeof __tpi_ls_set === 'function') __tpi_ls_set(key, dataStr);
+      else localStorage.setItem(key, dataStr);
+      try{ tpiShowMsg('tpi-sync-msg','✅ 已保存到本地（fallback）', false); }catch(e){}
+      return true;
+    }catch(err){
+      console.error('[tpiLocalSave] failed:', err);
+      try{ tpiShowMsg('tpi-sync-msg',`❌ 本地保存失败：${err.message || err}`, true); }catch(e){}
+      return false;
+    }
+  };
+
+window.tpiSaveToday = async function(date){
     try{
       const dateKey = (date && String(date).trim()) ? String(date).trim() : getSelectedDate();
+      // Ensure latest UI is saved to localStorage before uploading
+      try{ if (typeof window.tpiLocalSave === 'function') window.tpiLocalSave(); }catch(e){}
+
       // collectDailyData() 返回 { [date]: dayData }
       let obj = null;
       try{ if (typeof window.collectDailyData === 'function') obj = window.collectDailyData(); }catch(e){}
@@ -30078,68 +30118,4 @@ try{
             // 距离上次自动备份至少 5 分钟（避免短时间连续写）
             if (window.__TPI_GIST_LAST_AUTOSAVE_AT__ && now - window.__TPI_GIST_LAST_AUTOSAVE_AT__ < INTERVAL) return;
             // 若用户刚刚在输入（10 秒内），稍等下一轮，降低“输入中触发保存”的风险
-            if (window.__TPI_GIST_LAST_CHANGE_AT__ && now - window.__TPI_GIST_LAST_CHANGE_AT__ < 10000) return;
-            window.__TPI_GIST_LAST_AUTOSAVE_AT__ = now;
-            const ok = window.tpiSaveToday();
-            // 成功后清 dirty（失败不清，下一轮继续尝试）
-            Promise.resolve(ok).then(v=>{ if (v) window.__TPI_GIST_DIRTY__ = false; }).catch(()=>{});
-          }catch(e){}
-
-        }catch(e){}
-      }, INTERVAL);
-    }catch(e){}
-  })();
-
-  // --- First-time guide: focus missing inputs ---
-  function hydrateConfig(){
-    try{
-      try{ if ($('gistId')) { $('gistId').value = GIST_ID; $('gistId').setAttribute('readonly','readonly'); } }catch(e){}
-
-      const u = lsGet(KEY_USERNAME,'') || '';
-      const g = lsGet(KEY_GIST_ID,'') || '';
-      if ($('tpi-username') && u && !$('tpi-username').value) $('tpi-username').value = u;
-      if ($('gistId') && g && !$('gistId').value) $('gistId').value = g;
-
-      // token 只从 sessionStorage 恢复（可选）
-      const tk = ssGet(KEY_TOKEN_SS,'') || '';
-      if ($('gistToken') && tk && !$('gistToken').value) $('gistToken').value = tk;
-
-// 自动备份开关：仅保存开关本身（不含 Token）
-try{
-  const auto = $('tpi-auto-backup');
-  if (auto){
-    const saved = lsGet('tpi_gist_auto_backup', '0');
-    auto.checked = (saved === '1');
-    auto.onchange = function(){
-      try{ lsSet('tpi_gist_auto_backup', auto.checked ? '1' : '0'); }catch(e){}
-    };
-  }
-}catch(e){}
-
-// 初次加载：若 sessionStorage 中无 Token，默认显示登录区
-try{ updateAuthPanels(); }catch(e){}
-
-
-      // 自动聚焦到缺失项
-      setTimeout(()=>{
-        try{
-          if (!$('tpi-username') || !$('gistId') || !$('gistToken')) return;
-          if (!$('tpi-username').value) return $('tpi-username').focus();
-          if (!$('gistId').value) return $('gistId').focus();
-          if (!ssGet(KEY_TOKEN_SS,'') && !$('gistToken').value) return $('gistToken').focus();
-        }catch(e){}
-      }, 80);
-    }catch(e){}
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', hydrateConfig, { once:true });
-  } else {
-    hydrateConfig();
-  }
-
-})();
-</script>
-
-</body>
-</html>
+            if (window.__TPI_GIST_LAST_CHANGE_AT__ && now - window.__TPI_GIST_LAST_CHANGE_AT__ < 100
