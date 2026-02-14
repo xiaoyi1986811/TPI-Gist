@@ -925,8 +925,12 @@ function __tpi_triggerRecalc() {
       window.TPI.calculateTPI();
     }
   } catch (e) {
-    console.warn('[__tpi_triggerRecalc] TPI计算失败:', e);
+    try{ console.warn('[__tpi_triggerRecalc] TPI计算失败:', e); }catch(_){}
   }
+
+  // ✅ 重算后：刷新 pill 看板 + 强制清理旧看板（避免下载/恢复后回退）
+  try{ if (window.ScoreDashboard && typeof window.ScoreDashboard.update === 'function') window.ScoreDashboard.update(); }catch(e){}
+  try{ if (typeof window.__tpi_killLegacyScoreboards === 'function') window.__tpi_killLegacyScoreboards(); }catch(e){}
 }
 
 
@@ -3021,485 +3025,6 @@ window.exportReportComplete = function(format) {
 .radar-attach-list{ font-style:italic; }
 </style>
 
-<!-- ========== PILL ONLY 修复补丁 (2026-02-15) ========== -->
-<script>
-console.log('✅ [PILL ONLY 修复补丁] 开始加载...');
-
-/* =========================================================
-   🎯 核心修复：完全禁用旧看板，只更新 PILL 看板
-   
-   修复策略：
-   1. ScoreDashboard.update() 只更新 ts-* 元素（pill看板）
-   2. 完全移除 dashboard-* 元素的更新逻辑  
-   3. MutationObserver 强化：立即删除任何旧看板元素
-   4. 下载/重算后强制清理旧看板
-   5. 确保pill看板的分数和评级可以实时更新
-========================================================= */
-
-// 🔥 立即执行：删除所有旧看板元素
-(function forceRemoveOldDashboards(){
-  'use strict';
-  
-  function removeOldDashboardElements(){
-    // 旧看板的ID列表
-    const oldDashboardIds = [
-      'dashboard-ami',
-      'dashboard-fli', 
-      'dashboard-bonus',
-      'dashboard-total',
-      'dashboard-rating'
-    ];
-    
-    let removed = 0;
-    oldDashboardIds.forEach(id => {
-      const el = document.getElementById(id);
-      if (el) {
-        // 先尝试删除整个父容器（递归向上查找）
-        let parent = el.parentElement;
-        let foundContainer = false;
-        while (parent && !foundContainer) {
-          if (parent.classList && (
-            parent.classList.contains('score-board') ||
-            parent.classList.contains('dashboard') ||
-            parent.id === 'tpi-dashboard' ||
-            (parent.style && parent.style.position === 'fixed')
-          )) {
-            // 但是不要删除 ts-* 元素所在的容器
-            if (!parent.querySelector('[id^="ts-"]')) {
-              console.log('[PILL ONLY] 删除旧看板容器:', parent.className || parent.id);
-              parent.remove();
-              removed++;
-              foundContainer = true;
-              break;
-            }
-          }
-          parent = parent.parentElement;
-        }
-        
-        // 如果没有找到父容器，直接删除元素本身
-        if (!foundContainer && el.parentElement) {
-          console.log('[PILL ONLY] 删除旧看板元素:', id);
-          el.remove();
-          removed++;
-        }
-      }
-    });
-    
-    if (removed > 0) {
-      console.log(`[PILL ONLY] 已删除 ${removed} 个旧看板元素/容器`);
-    }
-  }
-  
-  // 立即执行一次
-  removeOldDashboardElements();
-  
-  // DOM加载后再执行
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', removeOldDashboardElements);
-  } else {
-    setTimeout(removeOldDashboardElements, 0);
-  }
-  
-  // 延迟再执行几次（对抗异步渲染）
-  setTimeout(removeOldDashboardElements, 100);
-  setTimeout(removeOldDashboardElements, 500);
-  setTimeout(removeOldDashboardElements, 1000);
-  setTimeout(removeOldDashboardElements, 2000);
-  
-  // 暴露到全局，供其他地方调用
-  window.__forceRemoveOldDashboards = removeOldDashboardElements;
-})();
-
-// 🔥 修复 ScoreDashboard - 只更新 pill 看板
-(function patchScoreDashboard(){
-  'use strict';
-  
-  // 等待 ScoreDashboard 对象被定义
-  function waitAndPatch(){
-    if (typeof window.ScoreDashboard !== 'undefined' && window.ScoreDashboard.update) {
-      console.log('[PILL ONLY] 开始修补 ScoreDashboard...');
-      
-      // 保存原始方法
-      const originalGetScore = window.ScoreDashboard.getScore;
-      
-      // 🎯 完全重写 update 方法：只更新 ts-* 元素
-      window.ScoreDashboard.update = function() {
-        try {
-          console.log('[PILL ONLY] ScoreDashboard.update() 被调用 - 只更新 pill 看板');
-          
-          // 1. 获取分数（使用原始方法）
-          const ma7Score = originalGetScore.call(this, 'ma7-score') || 0;
-          const amiScore = originalGetScore.call(this, 'ami-score') || 0;
-          const fliScore = originalGetScore.call(this, 'fli-score') || 0;
-          const sysScore = originalGetScore.call(this, 'sys-score') || 0;
-          const bonusScore = originalGetScore.call(this, 'bonus-score') || 0;
-          
-          // 2. 计算总分
-          let total = originalGetScore.call(this, 'tpi-total') || 0;
-          const sum = ma7Score + amiScore + fliScore + sysScore + bonusScore;
-          if (!isFinite(total) || total === 0) total = sum;
-          
-          // 3. 只更新 pill 看板（ts-* 元素），使用安全的更新方法
-          const updatePillElement = (elementId, value) => {
-            const element = document.getElementById(elementId);
-            if (element) {
-              element.textContent = value;
-              
-              // 小幅动画
-              element.style.transform = 'scale(1.06)';
-              setTimeout(() => {
-                element.style.transform = 'scale(1)';
-              }, 160);
-            }
-          };
-          
-          updatePillElement('ts-ma7', ma7Score.toFixed(1));
-          updatePillElement('ts-ami', amiScore.toFixed(1));
-          updatePillElement('ts-fli', fliScore.toFixed(1));
-          updatePillElement('ts-sys', sysScore.toFixed(1));
-          updatePillElement('ts-bonus', bonusScore.toFixed(1));
-          updatePillElement('ts-total', total.toFixed(1));
-          
-          // 4. 更新评级（只更新 ts-rating）
-          const updatePillRating = (total) => {
-            const ratingEl = document.getElementById('ts-rating');
-            if (!ratingEl) return;
-            
-            let text = '';
-            let bg = 'rgba(148, 163, 184, 0.30)';
-            let border = 'rgba(148, 163, 184, 0.35)';
-            
-            if (total >= 201) {
-              text = '≥ 201 过载 (Overload)';
-              bg = 'rgba(239, 68, 68, 0.22)';
-              border = 'rgba(239, 68, 68, 0.30)';
-            } else if (total >= 156) {
-              text = '≥ 156 卓越 (Excellence)';
-              bg = 'rgba(16, 185, 129, 0.20)';
-              border = 'rgba(16, 185, 129, 0.28)';
-            } else if (total >= 121) {
-              text = '≥ 121 推进 (Steady)';
-              bg = 'rgba(59, 130, 246, 0.18)';
-              border = 'rgba(59, 130, 246, 0.26)';
-            } else if (total >= 95) {
-              text = '≥ 95 维持 (Baseline)';
-              bg = 'rgba(245, 158, 11, 0.18)';
-              border = 'rgba(245, 158, 11, 0.26)';
-            } else {
-              text = '< 95 维护 (Maintenance)';
-            }
-            
-            ratingEl.textContent = text;
-            try {
-              ratingEl.style.background = bg;
-              ratingEl.style.borderColor = border;
-            } catch (e) {}
-          };
-          
-          updatePillRating(total);
-          
-          // 5. 删除任何残留的旧看板
-          setTimeout(() => {
-            if (window.__forceRemoveOldDashboards) {
-              window.__forceRemoveOldDashboards();
-            }
-          }, 50);
-          
-          console.log('[PILL ONLY] Pill 看板更新完成:', {
-            ma7: ma7Score.toFixed(1),
-            ami: amiScore.toFixed(1),
-            fli: fliScore.toFixed(1),
-            sys: sysScore.toFixed(1),
-            bonus: bonusScore.toFixed(1),
-            total: total.toFixed(1)
-          });
-          
-        } catch (error) {
-          console.error('[PILL ONLY] 分数看板更新失败:', error);
-        }
-      };
-      
-      // 🎯 重写 updateElement 方法：禁止更新 dashboard-* 元素
-      window.ScoreDashboard.updateElement = function(elementId, value) {
-        // 黑名单：不允许更新旧看板元素
-        const blacklist = ['dashboard-ami', 'dashboard-fli', 'dashboard-bonus', 'dashboard-total', 'dashboard-rating'];
-        if (blacklist.includes(elementId)) {
-          console.log(`[PILL ONLY] 阻止更新旧看板元素: ${elementId}`);
-          return; // 直接返回，不执行任何更新
-        }
-        
-        // 只更新白名单元素（ts-* 和其他合法元素）
-        const element = document.getElementById(elementId);
-        if (element) {
-          element.textContent = value;
-          
-          // 小幅动画
-          element.style.transform = 'scale(1.06)';
-          setTimeout(() => {
-            element.style.transform = 'scale(1)';
-          }, 160);
-        }
-      };
-      
-      // 🎯 重写 updateRating 方法：只更新 ts-rating
-      window.ScoreDashboard.updateRating = function(total) {
-        const ratingEl = document.getElementById('ts-rating'); // 只获取 pill 看板的评级元素
-        if (!ratingEl) return;
-        
-        let text = '';
-        let bg = 'rgba(148, 163, 184, 0.30)';
-        let border = 'rgba(148, 163, 184, 0.35)';
-        
-        if (total >= 201) {
-          text = '≥ 201 过载 (Overload)';
-          bg = 'rgba(239, 68, 68, 0.22)';
-          border = 'rgba(239, 68, 68, 0.30)';
-        } else if (total >= 156) {
-          text = '≥ 156 卓越 (Excellence)';
-          bg = 'rgba(16, 185, 129, 0.20)';
-          border = 'rgba(16, 185, 129, 0.28)';
-        } else if (total >= 121) {
-          text = '≥ 121 推进 (Steady)';
-          bg = 'rgba(59, 130, 246, 0.18)';
-          border = 'rgba(59, 130, 246, 0.26)';
-        } else if (total >= 95) {
-          text = '≥ 95 维持 (Baseline)';
-          bg = 'rgba(245, 158, 11, 0.18)';
-          border = 'rgba(245, 158, 11, 0.26)';
-        } else {
-          text = '< 95 维护 (Maintenance)';
-        }
-        
-        ratingEl.textContent = text;
-        try {
-          ratingEl.style.background = bg;
-          ratingEl.style.borderColor = border;
-        } catch (e) {}
-      };
-      
-      console.log('[PILL ONLY] ScoreDashboard 修补完成');
-      
-      // 立即执行一次更新
-      setTimeout(() => {
-        if (window.ScoreDashboard && window.ScoreDashboard.update) {
-          window.ScoreDashboard.update();
-        }
-      }, 200);
-      
-    } else {
-      // ScoreDashboard 还未定义，100ms 后重试
-      setTimeout(waitAndPatch, 100);
-    }
-  }
-  
-  // 开始等待和修补
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => setTimeout(waitAndPatch, 500));
-  } else {
-    setTimeout(waitAndPatch, 500);
-  }
-})();
-
-// 🔥 增强 MutationObserver：强制删除任何新插入的旧看板元素
-(function enhanceMutationObserver(){
-  'use strict';
-  
-  function setupEnhancedObserver(){
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.addedNodes) {
-          mutation.addedNodes.forEach((node) => {
-            if (node.nodeType === 1) { // Element node
-              // 检查是否是旧看板元素或其容器
-              const checkAndRemove = (el) => {
-                if (!el || !el.id) return false;
-                
-                const oldIds = ['dashboard-ami', 'dashboard-fli', 'dashboard-bonus', 'dashboard-total', 'dashboard-rating'];
-                if (oldIds.includes(el.id)) {
-                  console.log('[PILL ONLY] MutationObserver 删除新插入的旧看板元素:', el.id);
-                  // 尝试删除父容器，如果父容器不包含 ts-* 元素
-                  let parent = el.parentElement;
-                  let deleted = false;
-                  while (parent && !deleted) {
-                    if (!parent.querySelector('[id^="ts-"]')) {
-                      parent.remove();
-                      deleted = true;
-                      break;
-                    }
-                    parent = parent.parentElement;
-                  }
-                  if (!deleted) {
-                    el.remove();
-                  }
-                  return true;
-                }
-                return false;
-              };
-              
-              // 检查节点本身
-              if (checkAndRemove(node)) return;
-              
-              // 检查子节点
-              if (node.querySelectorAll) {
-                const oldElements = node.querySelectorAll('[id^="dashboard-"]');
-                oldElements.forEach(el => {
-                  console.log('[PILL ONLY] MutationObserver 删除子树中的旧看板元素:', el.id);
-                  let parent = el.parentElement;
-                  let deleted = false;
-                  while (parent && !deleted) {
-                    if (!parent.querySelector('[id^="ts-"]')) {
-                      parent.remove();
-                      deleted = true;
-                      break;
-                    }
-                    parent = parent.parentElement;
-                  }
-                  if (!deleted) {
-                    el.remove();
-                  }
-                });
-              }
-            }
-          });
-        }
-      });
-    });
-    
-    observer.observe(document.documentElement, {
-      childList: true,
-      subtree: true
-    });
-    
-    console.log('[PILL ONLY] 增强型 MutationObserver 已启动');
-  }
-  
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', setupEnhancedObserver);
-  } else {
-    setupEnhancedObserver();
-  }
-})();
-
-// 🔥 hook calculateAllScores：确保重算后只更新 pill 看板
-(function hookCalculateAllScores(){
-  'use strict';
-  
-  let hooked = false;
-  
-  function waitAndHook(){
-    if (hooked) return;
-    
-    // 尝试多个可能的位置
-    const targets = [
-      { obj: window, name: 'calculateAllScores' },
-      { obj: window.TPI, name: 'calculateAllScores' },
-    ];
-    
-    for (let target of targets) {
-      if (target.obj && typeof target.obj[target.name] === 'function') {
-        console.log(`[PILL ONLY] 找到 ${target.name}，开始 hook...`);
-        
-        const originalCalc = target.obj[target.name];
-        
-        target.obj[target.name] = function() {
-          console.log(`[PILL ONLY] ${target.name} 被调用`);
-          
-          // 执行原始计算
-          const result = originalCalc.apply(this, arguments);
-          
-          // 计算完成后，强制清理旧看板并只更新 pill 看板
-          setTimeout(() => {
-            if (window.__forceRemoveOldDashboards) {
-              window.__forceRemoveOldDashboards();
-            }
-            if (window.ScoreDashboard && window.ScoreDashboard.update) {
-              window.ScoreDashboard.update();
-            }
-            console.log(`[PILL ONLY] ${target.name} 完成，已清理旧看板并更新 pill 看板`);
-          }, 100);
-          
-          return result;
-        };
-        
-        console.log(`[PILL ONLY] ${target.name} hook 完成`);
-        hooked = true;
-        return;
-      }
-    }
-    
-    // 如果还没有找到，继续等待
-    if (!hooked) {
-      setTimeout(waitAndHook, 200);
-    }
-  }
-  
-  // 延迟启动，确保原始函数已定义
-  setTimeout(waitAndHook, 1000);
-})();
-
-// 🔥 hook loadFromLocalStorage：确保下载后只更新 pill 看板  
-(function hookLoadFromLocalStorage(){
-  'use strict';
-  
-  let hooked = false;
-  
-  function waitAndHook(){
-    if (hooked) return;
-    
-    const targets = [
-      { obj: window, name: 'loadFromLocalStorage' },
-      { obj: window.TPI, name: 'loadFromLocalStorage' },
-    ];
-    
-    for (let target of targets) {
-      if (target.obj && typeof target.obj[target.name] === 'function') {
-        console.log(`[PILL ONLY] 找到 ${target.name}，开始 hook...`);
-        
-        const originalLoad = target.obj[target.name];
-        
-        target.obj[target.name] = function() {
-          console.log(`[PILL ONLY] ${target.name} 被调用`);
-          
-          // 执行原始加载
-          const result = originalLoad.apply(this, arguments);
-          
-          // 加载完成后，强制清理旧看板并只更新 pill 看板
-          setTimeout(() => {
-            if (window.__forceRemoveOldDashboards) {
-              window.__forceRemoveOldDashboards();
-            }
-            if (window.ScoreDashboard && window.ScoreDashboard.update) {
-              window.ScoreDashboard.update();
-            }
-            console.log(`[PILL ONLY] ${target.name} 完成，已清理旧看板并更新 pill 看板`);
-          }, 150);
-          
-          return result;
-        };
-        
-        console.log(`[PILL ONLY] ${target.name} hook 完成`);
-        hooked = true;
-        return;
-      }
-    }
-    
-    if (!hooked) {
-      setTimeout(waitAndHook, 200);
-    }
-  }
-  
-  setTimeout(waitAndHook, 1000);
-})();
-
-// 🔥 定期清理：每5秒检查并删除旧看板（兜底机制）
-setInterval(() => {
-  if (window.__forceRemoveOldDashboards) {
-    window.__forceRemoveOldDashboards();
-  }
-}, 5000);
-
-console.log('✅ [PILL ONLY 修复补丁] 所有修复逻辑已加载完成');
-</script>
 </head>
                 <body>
                     ${reportContent.innerHTML}
@@ -5350,54 +4875,75 @@ window.exportAsCSV = function() {
 (function(){
   'use strict';
 
+  // ===== Legacy Scoreboard Guard =====
+  // 目标：只保留顶部 pill 看板（#tpi-top-scoreboard + ts-*），任何旧看板/重复看板一律隐藏/移除
   const KEEP_ID = 'tpi-top-scoreboard';
   const KEEP_SELECTOR = '#' + KEEP_ID;
 
-  function isElement(n){ return n && n.nodeType === 1; }
+  // 旧看板常见 id（本页历史遗留）
+  const LEGACY_SELECTORS = [
+    '#score-dashboard',
+    '[id^="dashboard-"]',
+    '#dashboard-rating'
+  ].join(',');
 
-  function textOf(el){
+  // 注入强制隐藏样式（即使旧看板被创建，也不会顶开布局）
+  function injectHideCSS(){
     try{
-      return (el.innerText || el.textContent || '').replace(/\s+/g,' ').trim();
-    }catch(e){ return ''; }
+      const sid = 'tpi-legacy-scoreboard-hide';
+      if (document.getElementById(sid)) return;
+      const st = document.createElement('style');
+      st.id = sid;
+      st.textContent = `
+        #score-dashboard{ display:none !important; }
+        [id^="dashboard-"]{ display:none !important; }
+        #dashboard-rating{ display:none !important; }
+      `;
+      document.head.appendChild(st);
+    }catch(e){}
   }
+
+  function isElement(n){ return n && n.nodeType === 1; }
 
   function isInsideKeep(el){
     try{
-      return el.id === KEEP_ID || (typeof el.closest === 'function' && el.closest(KEEP_SELECTOR));
+      return el.id === KEEP_ID || (typeof el.closest === 'function' && !!el.closest(KEEP_SELECTOR));
     }catch(e){ return false; }
-  }
-
-  function looksLikeScorebarText(txt){
-    if (!txt || txt.length < 18) return false;
-    // 必须同时出现多项关键字段，避免误杀普通提示条
-    const hasFields = /MA\s*\d|MA7\s*\d/i.test(txt) &&
-                      /AMI\s*\d/i.test(txt) &&
-                      /FLI\s*\d/i.test(txt) &&
-                      /SYS\s*\d/i.test(txt) &&
-                      /BONUS\s*\d/i.test(txt);
-    const hasTotal = /总分\s*\d/i.test(txt) || /TPI\s*总分\s*\d/i.test(txt);
-    const hasRating = /维护|Baseline|Steady|Excellence|Overload|维持|推进|卓越|过载/i.test(txt);
-    return hasFields && hasTotal && hasRating;
   }
 
   function isFixedTop(el){
     try{
-      const st = getComputedStyle(el);
-      const pos = st.position;
+      const cs = getComputedStyle(el);
+      if (!cs) return false;
+      const pos = cs.position;
       if (pos !== 'fixed' && pos !== 'sticky') return false;
-      const top = parseFloat(st.top || '0') || 0;
-      const z = parseInt(st.zIndex || '0', 10) || 0;
-      // 顶部 0~20px，且层级较高（通常是置顶栏）
-      return top <= 20 && z >= 5000;
-    }catch(e){
-      return false;
-    }
+      const top = parseFloat(cs.top || '0');
+      return isFinite(top) && top <= 4;
+    }catch(e){ return false; }
   }
 
-  function removeNode(el, reason){
+  function textOf(el){
+    try{ return (el.innerText || el.textContent || '').replace(/\s+/g,' ').trim(); }
+    catch(e){ return ''; }
+  }
+
+  function looksLikeScorebarText(txt){
+    // 既保守又够用：出现 “总分/评级” 或 “MA7/AMI/FLI/SYS/BONUS”等关键词之一
+    if (!txt) return false;
+    const t = txt.toLowerCase();
+    const hitA = (t.includes('总分') || t.includes('评级') || t.includes('tpi') || t.includes('score') || t.includes('rating'));
+    const hitB = (t.includes('ma7') || t.includes('ami') || t.includes('fli') || t.includes('sys') || t.includes('bonus'));
+    return hitA && hitB;
+  }
+
+  function removeNode(el){
+    try{ el.remove(); }catch(e){}
+  }
+
+  function hideNode(el){
     try{
-      console.warn('[TPI] 移除重复分数看板:', reason, el);
-      el.remove();
+      el.style.display = 'none';
+      el.setAttribute('aria-hidden','true');
     }catch(e){}
   }
 
@@ -5406,67 +4952,82 @@ window.exportAsCSV = function() {
     try{
       const all = document.querySelectorAll(KEEP_SELECTOR);
       if (all && all.length > 1){
-        for (let i = 1; i < all.length; i++){
-          removeNode(all[i], 'duplicate #tpi-top-scoreboard');
-        }
+        for (let i = 1; i < all.length; i++) removeNode(all[i]);
       }
     }catch(e){}
   }
 
-  function scan(root){
+  function killLegacy(root){
     try{
-      if (!root || !document.body) return;
+      injectHideCSS();
+      if (!document.body) return;
 
       dedupeKeepId();
 
-      const candidates = (root === document || root === document.body)
+      // 1) 旧看板：直接隐藏 + 尽量移除
+      try{
+        const legacy = (root && root.querySelectorAll) ? root.querySelectorAll(LEGACY_SELECTORS) : document.querySelectorAll(LEGACY_SELECTORS);
+        legacy && legacy.forEach(el=>{
+          if (!isElement(el)) return;
+          if (isInsideKeep(el)) return;
+          hideNode(el);
+          // 若是下载流程动态插入的，直接删掉，避免占用 DOM
+          if (el.id === 'score-dashboard') removeNode(el);
+        });
+      }catch(e){}
+
+      // 2) 顶部重复/旧顶栏：固定在顶部且文本像分数条 → 删
+      const candidates = (root === document || root === document.body || !root)
         ? Array.from(document.body.querySelectorAll('*'))
         : (isElement(root) ? [root].concat(Array.from(root.querySelectorAll('*'))) : []);
 
       for (const el of candidates){
         if (!isElement(el)) continue;
         if (isInsideKeep(el)) continue;
-
+        if (!isFixedTop(el)) continue;
         const txt = textOf(el);
         if (!looksLikeScorebarText(txt)) continue;
-
-        // 必须是“置顶/粘性顶栏”样式，才视为重复分数看板
-        if (!isFixedTop(el)) continue;
-
-        removeNode(el, 'fixed-top scorebar-like text');
+        removeNode(el);
       }
     }catch(e){}
   }
 
-  function start(){
-    scan(document);
+  // 对外暴露：下载成功后/重算后调用，确保“下载后不回退”
+  window.__tpi_killLegacyScoreboards = function(){
+    try{ killLegacy(document); }catch(e){}
+  };
 
-    // 监听 DOM 变化，登录后旧逻辑插入顶栏时可立即删除
+  function start(){
+    killLegacy(document);
+
+    // MutationObserver：刚插入就删（下载/登录后旧逻辑插入时立刻拦截）
     try{
       const mo = new MutationObserver((mutations)=>{
         for (const m of mutations){
           if (!m.addedNodes) continue;
           m.addedNodes.forEach((n)=>{
             if (!isElement(n)) return;
-            // 优先快速判断本节点
-            if (!isInsideKeep(n) && isFixedTop(n) && looksLikeScorebarText(textOf(n))){
-              removeNode(n, 'mutation-added scorebar');
+            if (isInsideKeep(n)) return;
+
+            // 快速路径：旧看板节点
+            if (n.matches && (n.matches('#score-dashboard') || n.matches('[id^="dashboard-"]') || n.matches('#dashboard-rating'))) {
+              hideNode(n);
+              if (n.id === 'score-dashboard') removeNode(n);
               return;
             }
-            // 否则扫描其子树
-            scan(n);
+
+            // 快速路径：固定顶栏重复
+            if (isFixedTop(n) && looksLikeScorebarText(textOf(n))){
+              removeNode(n);
+              return;
+            }
+
+            // 否则扫描子树
+            killLegacy(n);
           });
         }
       });
       mo.observe(document.documentElement, { childList: true, subtree: true });
-
-      // 兜底：登录后的异步渲染可能绕过 observer（极少见），短时间轮询一次
-      let ticks = 0;
-      const timer = setInterval(()=>{
-        ticks++;
-        scan(document);
-        if (ticks >= 20) clearInterval(timer); // 约 20s 后停止，避免常驻开销
-      }, 1000);
     }catch(e){}
   }
 
@@ -26155,22 +25716,21 @@ window.LoadingIndicator = {
 // ═══════════════════════════════════════════════════════════════════
 
 const ScoreDashboard = {
-    // 更新看板显示（顶部置顶看板 + 兼容旧看板）
+    // 仅更新顶部 pill 看板（ts-*）。旧看板一律不更新/不渲染。
     update: function() {
         try {
-            // 顶部看板字段：MA7 / AMI / FLI / SYS / BONUS / 总分 / 评级
+            // 读取分数（来自实时计分系统的输出字段）
             const ma7Score = this.getScore('ma7-score');
             const amiScore = this.getScore('ami-score');
             const fliScore = this.getScore('fli-score');
             const sysScore = this.getScore('sys-score');
             const bonusScore = this.getScore('bonus-score');
 
-            // 优先用系统已计算出的 tpi-total；若不存在则用各分项求和兜底
             let total = this.getScore('tpi-total');
             const sum = ma7Score + amiScore + fliScore + sysScore + bonusScore;
             if (!isFinite(total) || total === 0) total = sum;
 
-            // 顶部看板更新
+            // ✅ 只更新 pill 看板字段
             this.updateElement('ts-ma7', ma7Score.toFixed(1));
             this.updateElement('ts-ami', amiScore.toFixed(1));
             this.updateElement('ts-fli', fliScore.toFixed(1));
@@ -26178,17 +25738,14 @@ const ScoreDashboard = {
             this.updateElement('ts-bonus', bonusScore.toFixed(1));
             this.updateElement('ts-total', total.toFixed(1));
 
-            // 兼容：若页面仍存在旧看板元素，则一并更新（不影响顶部看板）
-            this.updateElement('dashboard-ami', amiScore.toFixed(1));
-            this.updateElement('dashboard-fli', fliScore.toFixed(1));
-            this.updateElement('dashboard-bonus', bonusScore.toFixed(1));
-            this.updateElement('dashboard-total', total.toFixed(1));
-
-            // 更新评级（顶部看板优先）
+            // ✅ 只更新 pill 看板评级
             this.updateRating(total);
 
+            // ✅ 强制清理/隐藏旧看板（避免下载流程回退）
+            try{ if (typeof window.__tpi_killLegacyScoreboards === 'function') window.__tpi_killLegacyScoreboards(); }catch(e){}
         } catch (error) {
-            console.error('分数看板更新失败:', error);
+            // 不刷屏：仅 error
+            try{ console.error('分数看板更新失败:', error); }catch(e){}
         }
     },
 
@@ -26216,38 +25773,25 @@ const ScoreDashboard = {
         }
     },
 
-    // 更新评级显示（与截图格式一致）
+    // 更新评级显示（只针对 pill 看板）
     updateRating: function(total) {
-        const ratingEl = document.getElementById('ts-rating') || document.getElementById('dashboard-rating');
+        const ratingEl = document.getElementById('ts-rating');
         if (!ratingEl) return;
 
         let text = '';
         let bg = 'rgba(148, 163, 184, 0.30)';
         let border = 'rgba(148, 163, 184, 0.35)';
 
-        if (total >= 201) {
-            text = '≥ 201 过载 (Overload)';
-            bg = 'rgba(239, 68, 68, 0.22)';
-            border = 'rgba(239, 68, 68, 0.30)';
-        } else if (total >= 156) {
-            text = '≥ 156 卓越 (Excellence)';
-            bg = 'rgba(16, 185, 129, 0.20)';
-            border = 'rgba(16, 185, 129, 0.28)';
-        } else if (total >= 121) {
-            text = '≥ 121 推进 (Steady)';
-            bg = 'rgba(59, 130, 246, 0.18)';
-            border = 'rgba(59, 130, 246, 0.26)';
-        } else if (total >= 95) {
-            text = '≥ 95 维持 (Baseline)';
-            bg = 'rgba(245, 158, 11, 0.18)';
-            border = 'rgba(245, 158, 11, 0.26)';
-        } else {
-            text = '< 95 维护 (Maintenance)';
-        }
+        if (total >= 95) { text = 'S+'; bg = 'rgba(34, 197, 94, 0.22)'; border = 'rgba(34, 197, 94, 0.35)'; }
+        else if (total >= 90) { text = 'S'; bg = 'rgba(34, 197, 94, 0.18)'; border = 'rgba(34, 197, 94, 0.28)'; }
+        else if (total >= 80) { text = 'A'; bg = 'rgba(59, 130, 246, 0.18)'; border = 'rgba(59, 130, 246, 0.28)'; }
+        else if (total >= 70) { text = 'B'; bg = 'rgba(234, 179, 8, 0.18)'; border = 'rgba(234, 179, 8, 0.28)'; }
+        else if (total >= 60) { text = 'C'; bg = 'rgba(249, 115, 22, 0.18)'; border = 'rgba(249, 115, 22, 0.28)'; }
+        else { text = 'D'; bg = 'rgba(239, 68, 68, 0.16)'; border = 'rgba(239, 68, 68, 0.24)'; }
 
         ratingEl.textContent = text;
 
-        // 顶部看板为 pill.rating，需要背景/边框；旧看板则只设背景即可
+        // 顶部看板为 pill.rating，需要背景/边框
         try {
             ratingEl.style.background = bg;
             ratingEl.style.borderColor = border;
@@ -26259,28 +25803,23 @@ const ScoreDashboard = {
     // 初始化
     init: function() {
         // 防止重复初始化
-        if (this.initialized) {
-            console.log('[ScoreDashboard] 已初始化，跳过');
-            return;
-        }
+        if (this.initialized) return;
 
         // 页面加载时更新一次
         this.update();
 
         // 监听输入变化：保持实时刷新
-        document.addEventListener('input', (e) => {
+        document.addEventListener('input', () => {
             clearTimeout(this.updateTimer);
             this.updateTimer = setTimeout(() => this.update(), 120);
         });
 
-        document.addEventListener('change', (e) => {
+        document.addEventListener('change', () => {
             clearTimeout(this.updateTimer);
             this.updateTimer = setTimeout(() => this.update(), 120);
         });
 
-        // 标记为已初始化
         this.initialized = true;
-        console.log('[ScoreDashboard] 初始化完成');
     },
 
     updateTimer: null
@@ -30701,6 +30240,10 @@ const dateKey = (date && String(date).trim()) ? String(date).trim() : getSelecte
       // 有数据：完整恢复
       try{
         if (typeof window.restoreUIFromData === 'function') window.restoreUIFromData(dayData);
+      // ✅ 下载后定点修复：只保留 pill 看板，禁止旧看板回退
+      try{ if (typeof window.__tpi_killLegacyScoreboards === 'function') window.__tpi_killLegacyScoreboards(); }catch(e){}
+      try{ if (window.ScoreDashboard && typeof window.ScoreDashboard.update === 'function') window.ScoreDashboard.update(); }catch(e){}
+
       }catch(e){
         console.warn('[restoreUIFromData] failed:', e);
       }
