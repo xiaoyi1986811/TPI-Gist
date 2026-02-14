@@ -3,64 +3,10 @@
 <html lang="zh-CN">
 <head>
 <script>
-/* TPI patch: reduce console spam (DataStats) */
-(function(){
-  try{
-    const origLog = console.log ? console.log.bind(console) : function(){};
-    const throttle = new Map();
-    function ok(key, interval){
-      const now = Date.now();
-      const last = throttle.get(key) || 0;
-      if (now - last < interval) return false;
-      throttle.set(key, now);
-      return true;
-    }
-    console.log = function(...args){
-      try{
-        const msg = (typeof args[0] === 'string') ? args[0] : '';
-        if (msg.includes('[DataStats]')) {
-          if (!ok('[DataStats]', 5000)) return;
-        }
-      } catch(e) {}
-      return origLog(...args);
-    };
-  } catch(e) {}
-})();
-</script>
-
-<script>
 
 /* ===== TPI Hotfix: 防止登录后控制台报错 + 降噪 (2026-02-15) ===== */
 (function(){
   'use strict';
-
-
-  // 0) 控制台降噪：抑制高频重复的 DataStats 日志（避免信息越刷越多）
-  try{
-    if (!window.__tpi_console_datasats_silenced) {
-      window.__tpi_console_datasats_silenced = true;
-      const __origLog = console.log.bind(console);
-      const __origInfo = (console.info ? console.info.bind(console) : __origLog);
-      const __origWarn = (console.warn ? console.warn.bind(console) : __origLog);
-      const __last = new Map();
-      const __shouldDrop = (args)=>{
-        try{
-          const s = String(args && args[0] !== undefined ? args[0] : '');
-          if (!s || !s.includes('[DataStats]')) return false;
-          const now = Date.now();
-          const key = s;
-          const last = __last.get(key) || 0;
-          // 同一条消息 5 秒内只输出一次
-          if (now - last < 5000) return true;
-          __last.set(key, now);
-          return false;
-        }catch(e){ return false; }
-      };
-      console.log = function(...args){ if (__shouldDrop(args)) return; return __origLog(...args); };
-      console.info = function(...args){ if (__shouldDrop(args)) return; return __origInfo(...args); };
-      console.warn = function(...args){ if (__shouldDrop(args)) return; return __origWarn(...args); };
-    }
-  }catch(e){}
 
   // 1) JSON.parse 防御：空字符串/仅空白/BOM => 返回 null（避免 "Unexpected end of input"）
   try{
@@ -19429,15 +19375,27 @@ try {
             /**
              * 更新统计数据
              */
+            // 控制台降噪：同类日志 5 秒内只打印一次，避免“信息越来越多”
+            const __tpi_dlog_last = Object.create(null);
+            function __tpi_dlog(key, ...args){
+                try{
+                    const now = Date.now();
+                    const last = __tpi_dlog_last[key] || 0;
+                    if (now - last < 5000) return;
+                    __tpi_dlog_last[key] = now;
+                    console.log(...args);
+                }catch(e){}
+            }
+
             function updateStatistics() {
-                console.log('[DataStats] 更新统计被调用');
+                __tpi_dlog('ds_call','[DataStats] 更新统计被调用');
                 
                 try {
                     const history = getHistoricalData();
-                    console.log('[DataStats] 获取历史数据，共', history.length, '条记录');
+                    __tpi_dlog('ds_hist','[DataStats] 获取历史数据，共', history.length, '条记录');
                     
                     const stats = calculateStatistics(history);
-                    console.log('[DataStats] 统计数据:', stats);
+                    __tpi_dlog('ds_stats','[DataStats] 统计数据:', stats);
 
                     // 更新显示
                     const daysCountElem = document.getElementById('stats-days-count');
@@ -19451,7 +19409,7 @@ try {
                     // 更新状态
                     state.dataStats = stats;
                     
-                    console.log('[DataStats] 统计更新完成');
+                    __tpi_dlog('ds_done','[DataStats] 统计更新完成');
 
                 } catch (error) {
                     console.error('[DataStats] 更新统计错误:', error);
@@ -24749,8 +24707,6 @@ window.archiveOldDataComplete = function() {
 };
 
 console.log('✅ 全局函数已定义: copyPreviousDayDataComplete, archiveOldDataComplete');
-})();
-
   </script>
 <script>
    // ═══════════════════════════════════════════════════════════════════
@@ -29660,7 +29616,7 @@ function parseGistFileContent(gistJson){
       const resGet = await gistGet(token);
 
       if (resGet.status === 401 || resGet.status === 403) {
-        tpiShowMsg('tpi-sync-msg','❌ Token 无效或无 gist 权限', true);
+        tpiShowMsg('tpi-sync-msg','❌ 登录失败：Token 无效/无权限（需开启 GitHub Token 的 Gists 读写权限；Fine-grained PAT 需授权 Gists）', true);
         return false;
       }
       if (resGet.status === 404) {
@@ -29726,7 +29682,7 @@ function parseGistFileContent(gistJson){
       const resPatch = await gistPatch(token, payload);
 
       if (resPatch.status === 401 || resPatch.status === 403) {
-        tpiShowMsg('tpi-sync-msg','❌ Token 无效或无 gist 权限', true);
+        tpiShowMsg('tpi-sync-msg','❌ 登录失败：Token 无效/无权限（需开启 GitHub Token 的 Gists 读写权限；Fine-grained PAT 需授权 Gists）', true);
         return false;
       }
       if (!resPatch.ok) {
@@ -29795,7 +29751,7 @@ function parseGistFileContent(gistJson){
       const resGet = await gistGet(token);
 
       if (resGet.status === 401 || resGet.status === 403) {
-        tpiShowMsg('tpi-sync-msg','❌ Token 无效或无 gist 权限', true);
+        tpiShowMsg('tpi-sync-msg','❌ 登录失败：Token 无效/无权限（需开启 GitHub Token 的 Gists 读写权限；Fine-grained PAT 需授权 Gists）', true);
         return {};
       }
       if (resGet.status === 404) {
@@ -29863,44 +29819,60 @@ function parseGistFileContent(gistJson){
   };
 
   window.tpiLogin = async function(){
-    // 防止重复点击导致并发请求 / 控制台刷屏
+    // 防止连点/并发导致“越来越多”请求与日志
     if (window.__tpi_login_inflight) {
-      try{ tpiShowMsg('tpi-sync-msg','⏳ 登录进行中，请稍候…', false); }catch(e){}
+      try{ tpiShowMsg('tpi-sync-msg','⏳ 登录进行中…', false); }catch(e){}
+      window.__tpi_login_inflight = false;
+      try{ const btn=document.querySelector('.tpi-login-btn'); if(btn){ btn.disabled=false; btn.style.opacity=''; btn.textContent='登录'; } }catch(e){}
       return false;
     }
     window.__tpi_login_inflight = true;
+    try{ const btn=document.querySelector('.tpi-login-btn'); if(btn){ btn.disabled=true; btn.style.opacity='0.6'; btn.textContent='登录中…'; } }catch(e){}
 
+
+    const auth = ensureAuth({needToken:true});
+    if (!auth) { window.__tpi_login_inflight = false;
+      try{ const btn=document.querySelector('.tpi-login-btn'); if(btn){ btn.disabled=false; btn.style.opacity=''; btn.textContent='登录'; } }catch(e){} window.__tpi_login_inflight = false;
+      try{ const btn=document.querySelector('.tpi-login-btn'); if(btn){ btn.disabled=false; btn.style.opacity=''; btn.textContent='登录'; } }catch(e){}
+      return false; }
+
+    const { username, gistId, token } = auth;
+
+    // ✅ 不再调用 /user（避免因 Token 类型/权限差异导致 401）
+    // 以“能否访问目标 Gist + 能否解析 tpi-data.json”作为唯一登录校验
+
+    // 保存 Token 到 sessionStorage（不进 localStorage）
+
+    ssSet(KEY_TOKEN_SS, token);
+       try{ ssRemove(LEGACY_KEY_TOKEN_SS); }catch(e){}
+    ssSet(KEY_GIST_ID_SS, gistId);
+    CURRENT_USERNAME = username;
+    CURRENT_GIST_ID = gistId;
+
+    // 轻量校验：尝试 GET 一次确保可访问且文件存在
     try{
-      const auth = ensureAuth({needToken:true});
-      if (!auth) return false;
-
-      const { username, gistId, token } = auth;
-
-      // ✅ 以 Gist 可访问性作为唯一有效性校验（避免 /user 权限差异导致 401）
       const res = await gistGet(token);
       if (res.status === 401 || res.status === 403) {
-        tpiShowMsg('tpi-sync-msg','❌ Token 无效/无权限（请确认 Token 对 Gist 具备读写权限）', true);
-        return false;
+        tpiShowMsg('tpi-sync-msg','❌ 登录失败：Token 无效/无权限（需开启 GitHub Token 的 Gists 读写权限；Fine-grained PAT 需授权 Gists）', true);
+        window.__tpi_login_inflight = false;
+      try{ const btn=document.querySelector('.tpi-login-btn'); if(btn){ btn.disabled=false; btn.style.opacity=''; btn.textContent='登录'; } }catch(e){}
+      return false;
       }
       if (res.status === 404) {
         tpiShowMsg('tpi-sync-msg','❌ Gist ID 无效或未设为 Secret', true);
-        return false;
+        window.__tpi_login_inflight = false;
+      try{ const btn=document.querySelector('.tpi-login-btn'); if(btn){ btn.disabled=false; btn.style.opacity=''; btn.textContent='登录'; } }catch(e){}
+      return false;
       }
       if (!res.ok) {
         tpiShowMsg('tpi-sync-msg',`❌ 登录失败：${res.status} ${res.statusText}`, true);
-        return false;
+        window.__tpi_login_inflight = false;
+      try{ const btn=document.querySelector('.tpi-login-btn'); if(btn){ btn.disabled=false; btn.style.opacity=''; btn.textContent='登录'; } }catch(e){}
+      return false;
       }
-
       const gistJson = await res.json();
       // 校验文件存在 + JSON可解析
       parseGistFileContent(gistJson);
-
-      // 通过校验后才写入会话，避免“坏 token”被写入导致后续反复 401
-      ssSet(KEY_TOKEN_SS, token);
-      try{ ssRemove(LEGACY_KEY_TOKEN_SS); }catch(e){}
-      ssSet(KEY_GIST_ID_SS, gistId);
-      CURRENT_USERNAME = username;
-      CURRENT_GIST_ID = gistId;
 
       // 非敏感配置写 localStorage
       lsSet(KEY_USERNAME, username);
@@ -29909,13 +29881,15 @@ function parseGistFileContent(gistJson){
       tpiShowMsg('tpi-sync-msg','✅ 已登录（Gist Token 已加载到会话）', false);
       toast('✅ 已登录（Gist Token 仅保存在当前标签页会话）', 'success');
       try{ updateAuthPanels(); }catch(e){}
+      window.__tpi_login_inflight = false;
+      try{ const btn=document.querySelector('.tpi-login-btn'); if(btn){ btn.disabled=false; btn.style.opacity=''; btn.textContent='登录'; } }catch(e){}
       return true;
     }catch(err){
       console.error('[Gist Login] failed:', err);
       tpiShowMsg('tpi-sync-msg',`❌ 登录失败，请检查网络：${err.message || err}`, true);
-      return false;
-    }finally{
       window.__tpi_login_inflight = false;
+      try{ const btn=document.querySelector('.tpi-login-btn'); if(btn){ btn.disabled=false; btn.style.opacity=''; btn.textContent='登录'; } }catch(e){}
+      return false;
     }
   };
 
