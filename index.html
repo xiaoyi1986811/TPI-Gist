@@ -8,24 +8,44 @@
 (function(){
   'use strict';
 
+
+  // 0) 控制台降噪：抑制高频重复的 DataStats 日志（避免信息越刷越多）
+  try{
+    if (!window.__tpi_console_datasats_silenced) {
+      window.__tpi_console_datasats_silenced = true;
+      const __origLog = console.log.bind(console);
+      const __origInfo = (console.info ? console.info.bind(console) : __origLog);
+      const __origWarn = (console.warn ? console.warn.bind(console) : __origLog);
+      const __last = new Map();
+      const __shouldDrop = (args)=>{
+        try{
+          const s = String(args && args[0] !== undefined ? args[0] : '');
+          if (!s || !s.includes('[DataStats]')) return false;
+          const now = Date.now();
+          const key = s;
+          const last = __last.get(key) || 0;
+          // 同一条消息 5 秒内只输出一次
+          if (now - last < 5000) return true;
+          __last.set(key, now);
+          return false;
+        }catch(e){ return false; }
+      };
+      console.log = function(...args){ if (__shouldDrop(args)) return; return __origLog(...args); };
+      console.info = function(...args){ if (__shouldDrop(args)) return; return __origInfo(...args); };
+      console.warn = function(...args){ if (__shouldDrop(args)) return; return __origWarn(...args); };
+    }
+  }catch(e){}
+
   // 1) JSON.parse 防御：空字符串/仅空白/BOM => 返回 null（避免 "Unexpected end of input"）
   try{
     if (!window.__tpi_json_parse_patched) {
       window.__tpi_json_parse_patched = true;
       const __origParse = JSON.parse;
       JSON.parse = function(text, reviver){
-        // 兼容：空字符串 / 仅空白 / BOM / 零宽字符
         if (typeof text === 'string') {
           const cleaned = text.replace(/\uFEFF/g,'').replace(/[\u200B-\u200D\u2060]/g,'').trim();
           if (cleaned === '') return null;
-          try{
-            return __origParse(cleaned, reviver);
-          }catch(err){
-            // 仅吞掉“末尾截断/空内容”类错误，避免打断登录与初始化
-            const msg = String(err && err.message ? err.message : err);
-            if (err && err.name === 'SyntaxError' && /Unexpected end of (JSON )?input/i.test(msg)) return null;
-            throw err;
-          }
+          return __origParse(cleaned, reviver);
         }
         return __origParse(text, reviver);
       };
@@ -76,64 +96,6 @@
       window.__tpi_console_raw = orig;
     }
   }catch(e){ /* ignore */ }
-})();
-
-/* 3) 统计/算分日志降噪：登录后 updateStatistics 可能被频繁触发，导致控制台越刷越多
-      - 将 window.TPI.updateStatistics 节流到 2 秒最多一次
-      - 执行期间临时静音 log/info/debug（warn/error 不动）
-*/
-(function(){
-  function throttle(fn, wait){
-    let last = 0, timer = null, lastArgs = null, lastThis = null;
-    return function(...args){
-      const now = Date.now();
-      lastArgs = args; lastThis = this;
-      const remain = wait - (now - last);
-      if (remain <= 0){
-        if (timer){ clearTimeout(timer); timer=null; }
-        last = now;
-        return fn.apply(lastThis, lastArgs);
-      }
-      if (!timer){
-        timer = setTimeout(()=>{
-          timer = null;
-          last = Date.now();
-          fn.apply(lastThis, lastArgs);
-        }, remain);
-      }
-    };
-  }
-
-  function silenceDuring(fn){
-    const noop = function(){};
-    const orig = { log: console.log, info: console.info, debug: console.debug };
-    console.log = noop; console.info = noop; console.debug = noop;
-    try{ return fn(); } finally { console.log = orig.log; console.info = orig.info; console.debug = orig.debug; }
-  }
-
-  function tryPatch(){
-    try{
-      if (!window.TPI || typeof window.TPI.updateStatistics !== 'function') return;
-      if (window.__tpi_update_stats_patched) return;
-      window.__tpi_update_stats_patched = true;
-
-      const origFn = window.TPI.updateStatistics.bind(window.TPI);
-      const wrapped = throttle(function(){
-        return silenceDuring(()=>origFn());
-      }, 2000);
-
-      window.TPI.updateStatistics = wrapped;
-    }catch(e){}
-  }
-
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', tryPatch, {once:true});
-  }else{
-    tryPatch();
-  }
-  // 兜底：某些脚本会晚一点才挂载 TPI
-  setTimeout(tryPatch, 800);
-  setTimeout(tryPatch, 2000);
 })();
 
 
@@ -29873,36 +29835,23 @@ function parseGistFileContent(gistJson){
   };
 
   window.tpiLogin = async function(){
-    const auth = ensureAuth({needToken:true});
-    if (!auth) return false;
-
-    const { username, gistId, token } = auth;
-
-    // 首先验证 Token 是否有效（调用 GitHub user API）
-    try{
-      const userRes = await fetchWithAuth('https://api.github.com/user', { method: 'GET' }, token);
-      if (userRes.status !== 200) {
-        tpiShowMsg('tpi-sync-msg','❌ Token 无效或已过期，请检查 Token 权限', true);
-        return false;
-      }
-    }catch(err){
-      console.error('[GitHub User Auth] failed:', err);
-      tpiShowMsg('tpi-sync-msg',`❌ Token 验证失败：${err.message || err}`, true);
+    // 防止重复点击导致并发请求 / 控制台刷屏
+    if (window.__tpi_login_inflight) {
+      try{ tpiShowMsg('tpi-sync-msg','⏳ 登录进行中，请稍候…', false); }catch(e){}
       return false;
     }
+    window.__tpi_login_inflight = true;
 
-    // 保存 Token 到 sessionStorage（不进 localStorage）
-    ssSet(KEY_TOKEN_SS, token);
-       try{ ssRemove(LEGACY_KEY_TOKEN_SS); }catch(e){}
-    ssSet(KEY_GIST_ID_SS, gistId);
-    CURRENT_USERNAME = username;
-    CURRENT_GIST_ID = gistId;
-
-    // 轻量校验：尝试 GET 一次确保可访问且文件存在
     try{
+      const auth = ensureAuth({needToken:true});
+      if (!auth) return false;
+
+      const { username, gistId, token } = auth;
+
+      // ✅ 以 Gist 可访问性作为唯一有效性校验（避免 /user 权限差异导致 401）
       const res = await gistGet(token);
       if (res.status === 401 || res.status === 403) {
-        tpiShowMsg('tpi-sync-msg','❌ Token 无效或无 gist 权限', true);
+        tpiShowMsg('tpi-sync-msg','❌ Token 无效/无权限（请确认 Token 对 Gist 具备读写权限）', true);
         return false;
       }
       if (res.status === 404) {
@@ -29913,9 +29862,17 @@ function parseGistFileContent(gistJson){
         tpiShowMsg('tpi-sync-msg',`❌ 登录失败：${res.status} ${res.statusText}`, true);
         return false;
       }
+
       const gistJson = await res.json();
       // 校验文件存在 + JSON可解析
       parseGistFileContent(gistJson);
+
+      // 通过校验后才写入会话，避免“坏 token”被写入导致后续反复 401
+      ssSet(KEY_TOKEN_SS, token);
+      try{ ssRemove(LEGACY_KEY_TOKEN_SS); }catch(e){}
+      ssSet(KEY_GIST_ID_SS, gistId);
+      CURRENT_USERNAME = username;
+      CURRENT_GIST_ID = gistId;
 
       // 非敏感配置写 localStorage
       lsSet(KEY_USERNAME, username);
@@ -29929,6 +29886,8 @@ function parseGistFileContent(gistJson){
       console.error('[Gist Login] failed:', err);
       tpiShowMsg('tpi-sync-msg',`❌ 登录失败，请检查网络：${err.message || err}`, true);
       return false;
+    }finally{
+      window.__tpi_login_inflight = false;
     }
   };
 
