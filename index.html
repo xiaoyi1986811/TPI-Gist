@@ -29871,6 +29871,16 @@ function parseGistFileContent(gistJson){
       ssSet(KEY_TOKEN_SS, token);
        try{ ssRemove(LEGACY_KEY_TOKEN_SS); }catch(e){}
 
+      // 生成丰富提示信息（本地计算，不改变云端结构）
+      const remoteUpdatedAt = (gistJson && gistJson.updated_at) ? String(gistJson.updated_at) : '';
+      const gid = String(gistId || '');
+      const gidShort = gid ? (gid.slice(0,6) + '…' + gid.slice(-4)) : '';
+
+      const safeObj = (dayData && typeof dayData === 'object' && !Array.isArray(dayData)) ? dayData : {};
+      const downloadedKeys = Object.keys(safeObj);
+      const downloadedKcnt = downloadedKeys.length;
+      const downloadedPreview = downloadedKeys.slice(0,16).join('、') + (downloadedKeys.length > 16 ? '…' : '');
+
       const nowIso = new Date().toISOString();
       const msg =
 `📥 云端同步下载成功
