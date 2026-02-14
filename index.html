@@ -4824,6 +4824,94 @@ window.exportAsCSV = function() {
 
 <div id="tpi-top-scoreboard-spacer" aria-hidden="true"></div>
 
+<script id="tpi-scoreboard-dedupe">
+/* =========================================================
+   分数看板去重（只保留卡片式顶部分数看板：#tpi-top-scoreboard）
+   - 需求：删除“登录后出现的另一套（纯文本/旧样式）分数看板”
+   - 保留：当前卡片式顶部分数看板（pill 风格）
+   - 做法：在页面加载后与登录后短时间内多次扫除疑似重复看板
+========================================================= */
+(function(){
+  'use strict';
+  const KEEP_ID = 'tpi-top-scoreboard';
+
+  function normalizeText(s){
+    return String(s||'').replace(/\s+/g,' ').trim();
+  }
+
+  function looksLikeDuplicateScoreboard(el){
+    if (!el || el.nodeType !== 1) return false;
+    if (el.id === KEEP_ID) return false;
+    if (el.closest && el.closest('#' + KEEP_ID)) return false;
+
+    const tag = (el.tagName||'').toUpperCase();
+    if (tag === 'OPTION' || tag === 'SELECT' || tag === 'SCRIPT' || tag === 'STYLE') return false;
+
+    const txt = normalizeText(el.textContent);
+    // 必须同时命中：MA7/AMI/FLI/SYS/BONUS/总分，且包含评级关键词
+    const must = ['MA7','AMI','FLI','SYS','BONUS','总分'];
+    if (!must.every(k => txt.includes(k))) return false;
+    if (!(txt.includes('维护') || txt.includes('Maintenance') || txt.includes('维持') || txt.includes('Baseline') || txt.includes('推进') || txt.includes('Steady') || txt.includes('卓越') || txt.includes('Excellence'))) return false;
+
+    // 尽量只删除“顶端固定的条状看板”
+    try{
+      const cs = window.getComputedStyle(el);
+      const pos = cs.position;
+      if (pos !== 'fixed' && pos !== 'sticky') return false;
+      const top = parseFloat(cs.top || '0');
+      if (isFinite(top) && top > 60) return false;
+      const z = parseInt(cs.zIndex || '0', 10);
+      if (isFinite(z) && z < 500) return false;
+    }catch(e){
+      return false;
+    }
+    return true;
+  }
+
+  function sweep(){
+    try{
+      // 1) 删除疑似重复的“纯文本顶条看板”
+      const all = document.querySelectorAll('body *');
+      all.forEach(el=>{
+        if (looksLikeDuplicateScoreboard(el)) {
+          try{ el.remove(); }catch(e){}
+        }
+      });
+
+      // 2) 若旧版看板（score-dashboard）被真实插入到 DOM，也一并移除（不影响模板字符串里的内容）
+      const old = document.getElementById('score-dashboard');
+      if (old && old.id !== KEEP_ID) {
+        // 仅当它实际在页面中显示且不是隐藏模板时才移除
+        try{
+          const cs = window.getComputedStyle(old);
+          if (cs && cs.display !== 'none' && cs.visibility !== 'hidden') old.remove();
+        }catch(e){ try{ old.remove(); }catch(_e){} }
+      }
+    }catch(e){}
+  }
+
+  // 初次执行
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', sweep, { once:true });
+  } else {
+    sweep();
+  }
+
+  // 登录后/异步渲染后：短时间内重复扫除（不长期占用）
+  let count = 0;
+  const timer = setInterval(()=>{
+    sweep();
+    count++;
+    if (count >= 30) clearInterval(timer); // ~15s
+  }, 500);
+
+  // 供调试/手动调用
+  window.__tpi_removeDuplicateScoreboards = sweep;
+})();
+</script>
+
+
+
 <script>
 /* =========================================================
    顶部分数看板：置顶 + 自动下移 quick-nav + 自动测量占位高度
