@@ -30320,17 +30320,17 @@ document.addEventListener('DOMContentLoaded', function() {
   setTimeout(function() {
     console.log('🔄 [TPI优化] 开始增强现有函数...');
     
-    // 增强上传函数
-    if (typeof window.saveTodaysData !== 'undefined') {
-      var originalSave = window.saveTodaysData;
-      window.saveTodaysData = async function() {
-        console.log('📤 [TPI优化] saveTodaysData 被调用');
+    // 增强上传函数 (修复：使用正确的函数名 tpiSaveToday)
+    if (typeof window.tpiSaveToday !== 'undefined') {
+      var originalSave = window.tpiSaveToday;
+      window.tpiSaveToday = async function() {
+        console.log('📤 [TPI优化] tpiSaveToday 被调用');
         try {
           TPILoader.show('正在上传数据到云端...');
           var result = await originalSave.apply(this, arguments);
           TPILoader.hide();
           
-          if (result && result.success !== false) {
+          if (result) {
             TPIToast.success('✅ 数据已成功上传到云端');
           }
           
@@ -30342,20 +30342,20 @@ document.addEventListener('DOMContentLoaded', function() {
           throw error;
         }
       };
-      console.log('✅ [TPI优化] saveTodaysData 已增强');
+      console.log('✅ [TPI优化] tpiSaveToday 已增强');
     }
     
-    // 增强下载函数
-    if (typeof window.loadHistoryFromCloud !== 'undefined') {
-      var originalLoad = window.loadHistoryFromCloud;
-      window.loadHistoryFromCloud = async function() {
-        console.log('📥 [TPI优化] loadHistoryFromCloud 被调用');
+    // 增强下载函数 (修复：使用正确的函数名 tpiLoadToday)
+    if (typeof window.tpiLoadToday !== 'undefined') {
+      var originalLoad = window.tpiLoadToday;
+      window.tpiLoadToday = async function() {
+        console.log('📥 [TPI优化] tpiLoadToday 被调用');
         try {
           TPILoader.show('正在从云端下载数据...');
           var result = await originalLoad.apply(this, arguments);
           TPILoader.hide();
           
-          if (result && result.success !== false) {
+          if (result) {
             TPIToast.success('✅ 数据已成功从云端加载');
           }
           
@@ -30367,7 +30367,32 @@ document.addEventListener('DOMContentLoaded', function() {
           throw error;
         }
       };
-      console.log('✅ [TPI优化] loadHistoryFromCloud 已增强');
+      console.log('✅ [TPI优化] tpiLoadToday 已增强');
+    }
+    
+    // 增强登录函数 (新增)
+    if (typeof window.tpiLogin !== 'undefined') {
+      var originalLogin = window.tpiLogin;
+      window.tpiLogin = async function() {
+        console.log('🔐 [TPI优化] tpiLogin 被调用');
+        try {
+          TPILoader.show('正在验证登录信息...');
+          var result = await originalLogin.apply(this, arguments);
+          TPILoader.hide();
+          
+          if (result) {
+            TPIToast.success('✅ 登录成功！');
+          }
+          
+          return result;
+        } catch (error) {
+          TPILoader.hide();
+          console.error('❌ [TPI优化] 登录失败:', error);
+          TPIToast.error('❌ 登录失败：' + (error.message || '未知错误'));
+          throw error;
+        }
+      };
+      console.log('✅ [TPI优化] tpiLogin 已增强');
     }
     
     // 增强签到函数
