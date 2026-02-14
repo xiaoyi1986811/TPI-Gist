@@ -3,6 +3,32 @@
 <html lang="zh-CN">
 <head>
 <script>
+/* TPI patch: reduce console spam (DataStats) */
+(function(){
+  try{
+    const origLog = console.log ? console.log.bind(console) : function(){};
+    const throttle = new Map();
+    function ok(key, interval){
+      const now = Date.now();
+      const last = throttle.get(key) || 0;
+      if (now - last < interval) return false;
+      throttle.set(key, now);
+      return true;
+    }
+    console.log = function(...args){
+      try{
+        const msg = (typeof args[0] === 'string') ? args[0] : '';
+        if (msg.includes('[DataStats]')) {
+          if (!ok('[DataStats]', 5000)) return;
+        }
+      } catch(e) {}
+      return origLog(...args);
+    };
+  } catch(e) {}
+})();
+</script>
+
+<script>
 
 /* ===== TPI Hotfix: 防止登录后控制台报错 + 降噪 (2026-02-15) ===== */
 (function(){
@@ -24723,6 +24749,8 @@ window.archiveOldDataComplete = function() {
 };
 
 console.log('✅ 全局函数已定义: copyPreviousDayDataComplete, archiveOldDataComplete');
+})();
+
   </script>
 <script>
    // ═══════════════════════════════════════════════════════════════════
