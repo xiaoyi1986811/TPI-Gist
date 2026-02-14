@@ -3255,6 +3255,26 @@ window.safeShowToast = function(message, type) {
     }
 };
 
+
+// ✅ AutoSaveManager 早期占位（独立于 InputValidator，避免某些分支未创建导致 ReferenceError）
+// 说明：部分代码可能直接使用 AutoSaveManager.xxx（未加 window.），因此这里同时建立全局别名。
+try {
+    if (!window.AutoSaveManager) {
+        window.AutoSaveManager = {
+            init: function(){ /* no-op */ },
+            start: function(){ /* no-op */ },
+            stop: function(){ /* no-op */ }
+        };
+        console.warn('⚠️ AutoSaveManager 未定义，已启用占位以避免阻塞登录/同步等功能');
+    }
+    // 建立全局变量别名，避免 “AutoSaveManager is not defined”
+    if (typeof AutoSaveManager === 'undefined') {
+        var AutoSaveManager = window.AutoSaveManager; // eslint-disable-line no-var
+    }
+} catch (e) {
+    // ignore
+}
+
 // 为InputValidator创建早期占位对象
 if (!window.InputValidator) {
     window.InputValidator = {
@@ -3264,6 +3284,12 @@ if (!window.InputValidator) {
         }
     };
     console.log('✅ 创建InputValidator占位对象');
+
+    // ✅ AutoSaveManager 占位（防止未定义导致脚本中断，真实实现若存在会覆盖）
+    if (!window.AutoSaveManager) {
+        window.AutoSaveManager = { init: function(){ /* no-op placeholder */ } };
+        console.warn('⚠️ AutoSaveManager 未定义，已启用占位以避免阻塞登录/同步等功能');
+    }
 }
 
 console.log('✅ [早期初始化] 关键函数定义完成');
@@ -25245,12 +25271,12 @@ if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         // 延迟100ms初始化，确保其他模块已加载
         setTimeout(() => {
-            AutoSaveManager.init();
+            try { if (window.AutoSaveManager && typeof window.AutoSaveManager.init === 'function') { window.AutoSaveManager.init(); } } catch(e){ console.warn('⚠️ AutoSaveManager.init 执行失败已忽略:', e); }
         }, 100);
     });
 } else {
     setTimeout(() => {
-        AutoSaveManager.init();
+        try { if (window.AutoSaveManager && typeof window.AutoSaveManager.init === 'function') { window.AutoSaveManager.init(); } } catch(e){ console.warn('⚠️ AutoSaveManager.init 执行失败已忽略:', e); }
     }, 100);
 }
 }
@@ -29422,11 +29448,10 @@ try{
       if (!isError) el2.textContent = text || '';
     }
     if (isError) {
-      // 失败：红色提示 3 秒后消失
+      try{ if (typeof toast==='function') toast(text || '操作失败', 'error'); }catch(_){ }
+      // 失败：红色提示 8 秒后消失，并弹出 toast（避免“登录无反应”的错觉）
       try{
-        setTimeout(()=>{
-          try{ if (el) el.textContent=''; }catch(_){}
-        }, 3000);
+        setTimeout(()=>{ try{ if (el) el.textContent=''; }catch(_){ } }, 8000);
       }catch(_){}
     }
   }
