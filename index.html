@@ -29409,7 +29409,8 @@ try{
   function $(id){ try{ return document.getElementById(id); }catch(e){ return null; } }
 
   function tpiShowMsg(elementId, text, isError){
-    const el = $(elementId);
+    // 兼容：历史脚本用 tpi-sync-msg，但页面里实际是 tpi-login-msg
+    const el = $(elementId) || (elementId==='tpi-sync-msg' ? $('tpi-login-msg') : null);
     const el2 = $('sync-status'); // 兼容建议的 sync-status
     if (el) {
       el.textContent = text || '';
