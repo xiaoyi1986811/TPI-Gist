@@ -142,7 +142,6 @@
 })();
 console.log('✅ 日期初始化脚本已加载');
 </script>
-
 <script>
 /* =========================================================
    按需加载模式（On-Demand）
@@ -223,37 +222,6 @@ window.__tpi_clearAllForm = function(){
   }
 };
 
-// 日期切换：模拟新一天开始（必须清空，但不自动加载历史）
-window.__tpi_resetForNewDay = function(dateKey){
-  try{
-    // 设置日期（如果传入）
-    try{
-      const di = document.getElementById('date-input');
-      if (di && dateKey) di.value = dateKey;
-    }catch(e){}
-    window.__tpi_clearAllForm();
-    try{ if (typeof window.__tpi_triggerRecalc === 'function') window.__tpi_triggerRecalc(); }catch(e){}
-  }catch(e){}
-};
-
-// ✅ 首次加载：强制清空（确保初始渲染完全空白）
-if (document.readyState === 'loading'){
-  document.addEventListener('DOMContentLoaded', function(){
-    setTimeout(function(){
-      window.__tpi_resetForNewDay((document.getElementById('date-input')||{}).value || '');
-    }, 0);
-  }, { once:true });
-} else {
-  setTimeout(function(){
-    window.__tpi_resetForNewDay((document.getElementById('date-input')||{}).value || '');
-  }, 0);
-}
-
-/* <!-- 已移除自动加载，改为按需加载 -->
-   说明：已禁止在 window.onload / DOMContentLoaded / 日期初始化阶段自动调用 loadFromGist()。
-   历史数据仅在用户点击“从云端下载”时加载。
-*/
-</script>
 
 <script>
 /* =========================================================
@@ -414,6 +382,9 @@ window.__tpi_legacy_loadTpiData_1 = function () {
 
     // 2) 触发一次规则计算（确保“页面当前显示内容”是最新）
     try{ if (typeof window.__tpi_triggerRecalc === 'function') window.__tpi_triggerRecalc(); }catch(e){}
+    // 2.1) 额外保险：刷新分数看板/统计（如果存在）
+    try{ if (window.ScoreDashboard && typeof window.ScoreDashboard.update === 'function') window.ScoreDashboard.update(); }catch(e){}
+    try{ if (window.TPI && typeof window.TPI.updateStatistics === 'function') window.TPI.updateStatistics(); }catch(e){}
 
     // 3) 采集快照（包含 _formState + _viewState + 各模块补丁字段）
     let snapObj = null;
@@ -2178,6 +2149,478 @@ ${value ?? ''}
     console.log('✅ 终极 DOM 接管补丁已生效');
 });
 </script>
+
+<!-- ========================================
+     TPI 优化系统 - 字体和图标库
+     添加位置：head 标签末尾
+======================================== -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest"></script>
+
+<!-- ========================================
+     TPI 优化系统 v1.0 - CSS 样式系统
+     核心优化：变量系统 + 组件样式 + 动画
+======================================== -->
+<style>
+/* ========================================
+   CSS 变量系统
+======================================== */
+:root {
+  /* 色彩 */
+  --tpi-primary: #4A90E2;
+  --tpi-primary-dark: #357ABD;
+  --tpi-secondary: #50C878;
+  --tpi-accent: #F59E0B;
+  --tpi-gradient-primary: linear-gradient(135deg, #4A90E2 0%, #50C878 100%);
+  --tpi-gradient-warm: linear-gradient(135deg, #F59E0B 0%, #EF4444 100%);
+  --tpi-success: #10B981;
+  --tpi-warning: #F59E0B;
+  --tpi-error: #EF4444;
+  --tpi-info: #3B82F6;
+  
+  /* 中性色 */
+  --tpi-gray-50: #F9FAFB;
+  --tpi-gray-100: #F3F4F6;
+  --tpi-gray-200: #E5E7EB;
+  --tpi-gray-300: #D1D5DB;
+  --tpi-gray-400: #9CA3AF;
+  --tpi-gray-500: #6B7280;
+  --tpi-gray-700: #374151;
+  --tpi-gray-800: #1F2937;
+  --tpi-gray-900: #111827;
+  
+  /* 间距 */
+  --tpi-space-xs: 4px;
+  --tpi-space-sm: 8px;
+  --tpi-space-md: 16px;
+  --tpi-space-lg: 24px;
+  --tpi-space-xl: 32px;
+  
+  /* 阴影 */
+  --tpi-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --tpi-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  --tpi-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  --tpi-shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  
+  /* 圆角 */
+  --tpi-radius-sm: 4px;
+  --tpi-radius-md: 8px;
+  --tpi-radius-lg: 12px;
+  --tpi-radius-xl: 16px;
+  --tpi-radius-full: 9999px;
+  
+  /* 过渡 */
+  --tpi-transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --tpi-transition-base: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  --tpi-transition-slow: 500ms cubic-bezier(0.4, 0, 0.2, 1);
+  
+  /* 字体 */
+  --tpi-font-body: 'Inter', 'Microsoft YaHei', sans-serif;
+  --tpi-font-display: 'Poppins', 'Noto Sans SC', sans-serif;
+  --tpi-font-mono: 'JetBrains Mono', monospace;
+  
+  /* Z-index */
+  --tpi-z-toast: 9999;
+}
+
+/* 全局优化 */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--tpi-font-body);
+  line-height: 1.6;
+  color: var(--tpi-gray-800);
+  background: var(--tpi-gray-50);
+}
+
+::selection {
+  background: var(--tpi-primary);
+  color: white;
+}
+
+/* 卡片系统 */
+.tpi-card {
+  background: white;
+  border-radius: var(--tpi-radius-lg);
+  box-shadow: var(--tpi-shadow-md);
+  padding: var(--tpi-space-lg);
+  margin-bottom: var(--tpi-space-md);
+  transition: all var(--tpi-transition-base);
+}
+
+.tpi-card:hover {
+  box-shadow: var(--tpi-shadow-lg);
+  transform: translateY(-2px);
+}
+
+.tpi-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--tpi-space-md);
+  padding-bottom: var(--tpi-space-md);
+  border-bottom: 1px solid var(--tpi-gray-200);
+}
+
+.tpi-card-title {
+  font-family: var(--tpi-font-display);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--tpi-gray-900);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--tpi-space-sm);
+}
+
+.tpi-card-body {
+  padding: 0;
+}
+
+/* 按钮系统 */
+.tpi-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--tpi-space-sm);
+  padding: var(--tpi-space-sm) var(--tpi-space-lg);
+  border: none;
+  border-radius: var(--tpi-radius-md);
+  font-family: var(--tpi-font-body);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--tpi-transition-fast);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.tpi-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tpi-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.tpi-btn-primary {
+  background: var(--tpi-gradient-primary);
+  color: white;
+  box-shadow: var(--tpi-shadow-sm);
+}
+
+.tpi-btn-primary:hover:not(:disabled) {
+  box-shadow: var(--tpi-shadow-md);
+  transform: translateY(-1px);
+}
+
+.tpi-btn-secondary {
+  background: white;
+  color: var(--tpi-primary);
+  border: 2px solid var(--tpi-primary);
+}
+
+.tpi-btn-secondary:hover:not(:disabled) {
+  background: var(--tpi-gray-50);
+}
+
+.tpi-btn-success {
+  background: var(--tpi-success);
+  color: white;
+}
+
+.tpi-btn-success:hover:not(:disabled) {
+  background: #059669;
+  transform: scale(1.02);
+}
+
+.tpi-btn-warning {
+  background: var(--tpi-warning);
+  color: white;
+}
+
+.tpi-btn-warning:hover:not(:disabled) {
+  background: #D97706;
+}
+
+.tpi-btn-danger {
+  background: var(--tpi-error);
+  color: white;
+}
+
+.tpi-btn-danger:hover:not(:disabled) {
+  background: #DC2626;
+}
+
+.tpi-btn-ghost {
+  background: transparent;
+  color: var(--tpi-gray-700);
+}
+
+.tpi-btn-ghost:hover:not(:disabled) {
+  background: var(--tpi-gray-100);
+}
+
+.tpi-btn-sm {
+  padding: var(--tpi-space-xs) var(--tpi-space-md);
+  font-size: 12px;
+}
+
+.tpi-btn-lg {
+  padding: var(--tpi-space-md) var(--tpi-space-xl);
+  font-size: 16px;
+}
+
+/* 输入框系统 */
+.tpi-input,
+.tpi-textarea,
+.tpi-select {
+  width: 100%;
+  padding: var(--tpi-space-md);
+  border: 2px solid var(--tpi-gray-300);
+  border-radius: var(--tpi-radius-md);
+  font-family: var(--tpi-font-body);
+  font-size: 16px;
+  color: var(--tpi-gray-900);
+  background: white;
+  transition: all var(--tpi-transition-fast);
+}
+
+.tpi-input:focus,
+.tpi-textarea:focus,
+.tpi-select:focus {
+  outline: none;
+  border-color: var(--tpi-primary);
+  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+}
+
+.tpi-input::placeholder,
+.tpi-textarea::placeholder {
+  color: var(--tpi-gray-400);
+}
+
+.tpi-input:disabled,
+.tpi-textarea:disabled,
+.tpi-select:disabled {
+  background: var(--tpi-gray-100);
+  cursor: not-allowed;
+}
+
+/* 输入组 */
+.tpi-input-group {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.tpi-input-group-icon {
+  position: absolute;
+  left: var(--tpi-space-md);
+  color: var(--tpi-gray-400);
+  pointer-events: none;
+}
+
+.tpi-input-group .tpi-input {
+  padding-left: calc(var(--tpi-space-md) * 2.5);
+}
+
+/* 标签 */
+.tpi-label {
+  display: block;
+  margin-bottom: var(--tpi-space-sm);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--tpi-gray-700);
+}
+
+.tpi-label-required::after {
+  content: '*';
+  color: var(--tpi-error);
+  margin-left: 4px;
+}
+
+/* 徽章 */
+.tpi-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--tpi-space-xs) var(--tpi-space-sm);
+  border-radius: var(--tpi-radius-full);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.tpi-badge-success {
+  background: #D1FAE5;
+  color: #065F46;
+}
+
+.tpi-badge-warning {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+.tpi-badge-error {
+  background: #FEE2E2;
+  color: #991B1B;
+}
+
+.tpi-badge-info {
+  background: #DBEAFE;
+  color: #1E40AF;
+}
+
+/* 分割线 */
+.tpi-divider {
+  height: 1px;
+  background: var(--tpi-gray-200);
+  margin: var(--tpi-space-lg) 0;
+  border: none;
+}
+
+/* 加载动画 */
+@keyframes tpi-spin {
+  to { transform: rotate(360deg); }
+}
+
+.tpi-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--tpi-gray-200);
+  border-top-color: var(--tpi-primary);
+  border-radius: 50%;
+  animation: tpi-spin 0.8s linear infinite;
+}
+
+.tpi-spinner-lg {
+  width: 40px;
+  height: 40px;
+  border-width: 4px;
+}
+
+/* 进度条 */
+.tpi-progress {
+  width: 100%;
+  height: 8px;
+  background: var(--tpi-gray-200);
+  border-radius: var(--tpi-radius-full);
+  overflow: hidden;
+}
+
+.tpi-progress-bar {
+  height: 100%;
+  background: var(--tpi-gradient-primary);
+  border-radius: var(--tpi-radius-full);
+  transition: width var(--tpi-transition-base);
+}
+
+/* 动画效果 */
+@keyframes tpi-fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tpi-animate-in {
+  animation: tpi-fade-in-up 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tpi-animate-delay-1 { animation-delay: 0.1s; opacity: 0; animation-fill-mode: forwards; }
+.tpi-animate-delay-2 { animation-delay: 0.2s; opacity: 0; animation-fill-mode: forwards; }
+.tpi-animate-delay-3 { animation-delay: 0.3s; opacity: 0; animation-fill-mode: forwards; }
+.tpi-animate-delay-4 { animation-delay: 0.4s; opacity: 0; animation-fill-mode: forwards; }
+
+@keyframes tpi-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.tpi-pulse {
+  animation: tpi-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes tpi-shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+  20%, 40%, 60%, 80% { transform: translateX(4px); }
+}
+
+.tpi-shake {
+  animation: tpi-shake 0.5s;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .tpi-card {
+    padding: var(--tpi-space-md);
+    margin-bottom: var(--tpi-space-sm);
+  }
+  
+  .tpi-btn {
+    font-size: 13px;
+    padding: var(--tpi-space-sm) var(--tpi-space-md);
+  }
+  
+  #tpi-toast-container {
+    left: 10px;
+    right: 10px;
+    top: 10px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .tpi-container {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+}
+/* ===== Gist 云端同步模块样式 (2026-02-14) ====== */
+#cloud-sync-section .tpi-sync-panel{max-width:980px;margin:0 auto;}
+#cloud-sync-section .tpi-sync-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:12px;align-items:end;}
+#cloud-sync-section .tpi-field{grid-column:span 6;}
+#cloud-sync-section .tpi-field-wide{grid-column:span 12;}
+#cloud-sync-section .tpi-field label{display:block;margin:0 0 6px;font-weight:700;color:#374151;font-size:13px;}
+#cloud-sync-section .tpi-field input{width:100%;padding:10px 12px;border:2px solid #e5e7eb;border-radius:10px;font-size:14px;outline:none;}
+#cloud-sync-section .tpi-field input:focus{border-color:#93c5fd;box-shadow:0 0 0 3px rgba(59,130,246,.15);}
+#cloud-sync-section .tpi-field-muted input{background:#f9fafb;color:#6b7280;}
+#cloud-sync-section .tpi-help{margin-top:8px;font-size:12px;color:#6b7280;line-height:1.45;}
+#cloud-sync-section .tpi-actions{grid-column:span 12;display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-start;}
+#cloud-sync-section .tpi-btn{padding:10px 14px;border:none;border-radius:10px;font-weight:700;cursor:pointer;line-height:1;user-select:none;}
+#cloud-sync-section .tpi-btn:active{transform:translateY(1px);}
+#cloud-sync-section .tpi-btn-green{background:linear-gradient(135deg,#10b981,#059669);color:#fff;}
+#cloud-sync-section .tpi-btn-blue{background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;}
+#cloud-sync-section .tpi-btn-cyan{background:linear-gradient(135deg,#06b6d4,#0891b2);color:#fff;}
+#cloud-sync-section .tpi-btn-red{background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;}
+#cloud-sync-section .tpi-btn-ghost{background:#f3f4f6;border:1px solid #e5e7eb;color:#111827;}
+#cloud-sync-section .tpi-msg{margin-top:10px;font-size:14px;min-height:18px;}
+#cloud-sync-section .tpi-submsg{margin-top:6px;font-size:13px;opacity:.9;min-height:16px;}
+#cloud-sync-section .tpi-sync-toolbar{display:flex;flex-wrap:wrap;gap:10px 12px;align-items:center;}
+#cloud-sync-section .tpi-sync-date{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+#cloud-sync-section .tpi-sync-date input[type="date"]{padding:8px 10px;border:2px solid #e5e7eb;border-radius:10px;font-size:14px;}
+#cloud-sync-section .tpi-label{font-weight:800;color:#374151;}
+#cloud-sync-section .tpi-sync-auto{display:flex;gap:8px;align-items:center;cursor:pointer;user-select:none;padding:6px 10px;border:1px solid #e5e7eb;border-radius:12px;background:#fafafa;}
+#cloud-sync-section .tpi-sync-user{font-weight:800;color:#111827;}
+#cloud-sync-section .tpi-sync-state{font-size:12px;color:#6b7280;padding:6px 10px;background:#f9fafb;border-radius:8px;}
+#cloud-sync-section .tpi-sync-buttons{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+#cloud-sync-section .tpi-token-row{display:flex;align-items:center;gap:14px;}
+#cloud-sync-section #gistToken{flex:1;min-width:420px;padding:10px 14px;font-size:15px;border-radius:8px;}
+@media (max-width: 760px){#cloud-sync-section .tpi-field{grid-column:span 12;}#cloud-sync-section #gistToken{min-width:100%;}}
+</style>
+
 <style>
    /* 补全模态框基础样式 */
     .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10001; align-items: center; justify-content: center; }
@@ -2262,29 +2705,7 @@ body.dark-theme .sync-help div {
 }
 
 .card{transition:all var(--transition-base);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);}.card:hover{box-shadow:var(--shadow-md);transform:translateY(-2px);}.card.collapsed{transition:all var(--transition-base);}.card.collapsed .card-content{transition:all var(--transition-base);opacity:0;max-height:0;overflow:hidden;}.card:not(.collapsed) .card-content{transition:all var(--transition-base);opacity:1;}button, .btn{transition:all var(--transition-fast);border-radius:var(--radius-md);cursor:pointer;border:1px solid transparent;}button:hover, .btn:hover{transform:translateY(-1px);box-shadow:var(--shadow-sm);}button:active, .btn:active{transform:translateY(0);}input:focus, select:focus, textarea:focus{outline:none;border-color:var(--color-primary);box-shadow:0 0 0 3px rgba(37, 99, 235, 0.1);transition:all var(--transition-fast);}table tr:nth-child(even){background-color:var(--color-bg-secondary);}table tr:hover{background-color:var(--color-bg-hover);transition:background-color var(--transition-fast);}body.dark-theme{--color-bg-primary:#1a1a1a;--color-bg-secondary:#2a2a2a;--color-bg-tertiary:#3a3a3a;--color-bg-hover:#2d3748;--color-text-primary:#e5e5e5;--color-text-secondary:#b8b8b8;--color-text-muted:#808080;--color-border:#404040;--color-border-light:#505050;--color-shadow:rgba(0, 0, 0, 0.3);}body.dark-theme .card{background:var(--color-bg-secondary);border-color:var(--color-border);}body.dark-theme .card:hover{background:var(--color-bg-tertiary);box-shadow:0 4px 12px rgba(0, 0, 0, 0.4);}body.dark-theme input, body.dark-theme select, body.dark-theme textarea{background:var(--color-bg-tertiary);color:var(--color-text-primary);border-color:var(--color-border);}body.dark-theme table tr:nth-child(even){background-color:rgba(255, 255, 255, 0.03);}body.dark-theme table tr:hover{background-color:rgba(255, 255, 255, 0.06);}::-webkit-scrollbar{width:10px;height:10px;}::-webkit-scrollbar-track{background:var(--color-bg-secondary);border-radius:var(--radius-sm);}::-webkit-scrollbar-thumb{background:var(--color-border);border-radius:var(--radius-sm);transition:background var(--transition-fast);}::-webkit-scrollbar-thumb:hover{background:var(--color-text-muted);}body.dark-theme::-webkit-scrollbar-track{background:var(--color-bg-tertiary);}body.dark-theme::-webkit-scrollbar-thumb{background:#505050;}body.dark-theme::-webkit-scrollbar-thumb:hover{background:#606060;}@keyframes fadeIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}@keyframes slideInRight{from{opacity:0;transform:translateX(20px);}to{opacity:1;transform:translateX(0);}}@keyframes slideOutRight{from{opacity:1;transform:translateX(0);}to{opacity:0;transform:translateX(20px);}}@keyframes pulse{0%, 100%{opacity:1;}50%{opacity:0.5;}}.section{animation:fadeIn 0.4s ease-out;}@keyframes pulse{0%, 100%{opacity:1;}50%{opacity:0.5;}}to{transform:translateX(0);opacity:1;}}#toast-container{position:fixed;top:20px;right:20px;z-index:calc(var(--z-modal) + 10);display:flex;flex-direction:column;gap:var(--spacing-3);pointer-events:none;}.toast{min-width:300px;max-width:400px;padding:var(--spacing-4) var(--spacing-5);border-radius:var(--radius-xl);background:var(--color-bg-primary);box-shadow:var(--shadow-xl);border:1px solid var(--color-border);display:flex;align-items:center;gap:var(--spacing-3);pointer-events:auto;animation:toastSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);}.toast.toast-exit{animation:toastSlideOut 0.25s cubic-bezier(0.6, -0.28, 0.735, 0.045) forwards;}.toast-icon{flex-shrink:0;font-size:var(--font-size-2xl);line-height:1;}.toast-content{flex:1;display:flex;flex-direction:column;gap:var(--spacing-1);}.toast-title{font-weight:600;font-size:var(--font-size-sm);color:var(--color-text-primary);}.toast-message{font-size:var(--font-size-sm);color:var(--color-text-secondary);line-height:1.4;}.toast.success{border-left:4px solid var(--color-success);}.toast.success .toast-icon{color:var(--color-success);}.toast.error{border-left:4px solid var(--color-danger);}.toast.error .toast-icon{color:var(--color-danger);}.toast.warning{border-left:4px solid var(--color-warning);}.toast.warning .toast-icon{color:var(--color-warning);}.toast.info{border-left:4px solid var(--color-info);}.toast.info .toast-icon{color:var(--color-info);}.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0, 0, 0, 0.5);backdrop-filter:blur(8px);z-index:var(--z-modal);display:flex;align-items:center;justify-content:center;padding:var(--spacing-4);animation:modalFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);}.modal-overlay.modal-exit{animation:modalFadeOut 0.2s cubic-bezier(0.6, -0.28, 0.735, 0.045) forwards;}.modal{background:var(--color-bg-primary);border-radius:var(--radius-xl);box-shadow:var(--shadow-xl);max-width:480px;width:100%;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;animation:modalScaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);}.modal-exit .modal{animation:modalScaleOut 0.2s cubic-bezier(0.6, -0.28, 0.735, 0.045) forwards;}.modal-header{padding:var(--spacing-6);border-bottom:1px solid var(--color-border);display:flex;align-items:center;gap:var(--spacing-4);flex-shrink:0;}.modal-icon{flex-shrink:0;width:48px;height:48px;border-radius:var(--radius-full);display:flex;align-items:center;justify-content:center;font-size:var(--font-size-3xl);}.modal-title-wrapper{flex:1;}.modal-title{font-size:var(--font-size-xl);font-weight:700;color:var(--color-text-primary);margin:0;line-height:1.3;}.modal-subtitle{font-size:var(--font-size-sm);color:var(--color-text-muted);margin-top:var(--spacing-1);}.modal-body{padding:var(--spacing-6);overflow-y:auto;flex:1;}.modal-message{font-size:var(--font-size-base);line-height:1.6;color:var(--color-text-secondary);margin-bottom:var(--spacing-4);}.modal-details{background:var(--color-bg-secondary);border-radius:var(--radius-md);padding:var(--spacing-4);font-size:var(--font-size-sm);color:var(--color-text-secondary);border-left:3px solid var(--color-border);}.modal-details strong{color:var(--color-text-primary);font-weight:600;}.modal-footer{padding:var(--spacing-6);border-top:1px solid var(--color-border);display:flex;gap:var(--spacing-3);justify-content:flex-end;flex-shrink:0;}.modal-button{padding:var(--spacing-3) var(--spacing-6);border-radius:var(--radius-lg);font-size:var(--font-size-base);font-weight:600;cursor:pointer;border:none;transition:all var(--transition-fast);font-family:var(--font-body);}.modal-button:hover{transform:translateY(-1px);box-shadow:var(--shadow-md);}.modal-button:active{transform:translateY(0);}.modal-button-primary{background:var(--color-primary);color:white;}.modal-button-primary:hover{background:var(--color-primary-dark);}.modal.danger .modal-icon{background:rgba(239, 68, 68, 0.1);color:var(--color-danger);}.modal.danger .modal-button-primary{background:var(--color-danger);}.modal.danger .modal-button-primary:hover{background:#dc2626;}.modal.warning .modal-icon{background:rgba(245, 158, 11, 0.1);color:var(--color-warning);}.modal.warning .modal-button-primary{background:var(--color-warning);}.modal.warning .modal-button-primary:hover{background:#d97706;}.modal.success .modal-icon{background:rgba(16, 185, 129, 0.1);color:var(--color-success);}.modal.success .modal-button-primary{background:var(--color-success);}.modal.success .modal-button-primary:hover{background:#059669;}.modal.legend .modal-icon{background:linear-gradient(135deg, rgba(168, 85, 247, 0.1), rgba(245, 158, 11, 0.1));color:var(--color-legend);}.modal.legend .modal-button-primary{background:linear-gradient(135deg, var(--color-legend), var(--color-warning));}.modal.legend .modal-button-primary:hover{background:linear-gradient(135deg, #9333ea, #d97706);}@keyframes toastSlideIn{from{transform:translateX(100%);opacity:0;}to{transform:translateX(0);opacity:1;}}@keyframes toastSlideOut{from{transform:translateX(0);opacity:1;}to{transform:translateX(120%);opacity:0;}}@keyframes modalFadeIn{from{opacity:0;}to{opacity:1;}}@keyframes modalFadeOut{from{opacity:1;}to{opacity:0;}}@keyframes modalScaleIn{from{transform:scale(0.9);opacity:0;}to{transform:scale(1);opacity:1;}}@keyframes modalScaleOut{from{transform:scale(1);opacity:1;}to{transform:scale(0.95);opacity:0;}}@media (max-width:768px){#toast-container{left:var(--spacing-4);right:var(--spacing-4);top:var(--spacing-4);}.toast{min-width:unset;width:100%;}.modal{max-width:100%;margin:var(--spacing-4);}.modal-header, .modal-body, .modal-footer{padding:var(--spacing-4);}.modal-icon{width:40px;height:40px;font-size:var(--font-size-2xl);}.modal-title{font-size:var(--font-size-lg);}}.date-nav-container{display:flex;align-items:center;gap:var(--spacing-2);flex-wrap:wrap;}.date-nav-btn{padding:var(--spacing-2) var(--spacing-3);border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-bg-primary);color:var(--color-text-secondary);font-size:var(--font-size-sm);cursor:pointer;transition:all var(--transition-fast);white-space:nowrap;}.date-nav-btn:hover{background:var(--color-bg-hover);border-color:var(--color-primary);color:var(--color-primary);}.date-nav-btn:active{transform:scale(0.95);}.date-nav-btn.icon-only{padding:var(--spacing-2);font-weight:bold;}.date-info{font-size:var(--font-size-sm);color:var(--color-text-muted);margin-left:var(--spacing-2);}.storage-indicator{display:inline-flex;align-items:center;gap:var(--spacing-2);padding:var(--spacing-2) var(--spacing-3);border-radius:var(--radius-md);background:var(--color-bg-secondary);font-size:var(--font-size-xs);color:var(--color-text-muted);}.storage-bar{width:60px;height:4px;background:var(--color-border);border-radius:var(--radius-full);overflow:hidden;}.storage-bar-fill{height:100%;background:var(--color-success);transition:all var(--transition-base);}.storage-bar-fill.warning{background:var(--color-warning);}.storage-bar-fill.danger{background:var(--color-danger);}.help-btn{position:absolute;bottom:80px;right:20px;width:50px;height:50px;border-radius:50%;background:var(--color-primary);color:white;border:none;cursor:pointer;box-shadow:var(--shadow-lg);display:flex;align-items:center;justify-content:center;font-size:var(--font-size-2xl);z-index:var(--z-fixed);transition:all var(--transition-base);}.help-btn:hover{transform:scale(1.1);box-shadow:var(--shadow-xl);}.password-strength{margin-top:var(--spacing-2);font-size:var(--font-size-xs);}.strength-bar{height:4px;background:var(--color-border);border-radius:var(--radius-full);overflow:hidden;margin-top:var(--spacing-1);}.strength-bar-fill{height:100%;transition:all var(--transition-base);}.strength-weak{background:var(--color-danger);}.strength-medium{background:var(--color-warning);}.strength-strong{background:var(--color-success);}@media (max-width:768px){.date-nav-container{width:100%;}.date-nav-btn{flex:1;min-width:60px;}.help-btn{bottom:130px;}.storage-indicator{width:100%;justify-content:center;}}body.dark-theme{--color-bg-primary:#1a1a1a;--color-bg-secondary:#2d2d2d;--color-bg-tertiary:#3a3a3a;--color-bg-hover:#404040;--color-text-primary:#f5f5f5;--color-text-secondary:#d1d1d1;--color-text-muted:#a0a0a0;--color-border:#4a4a4a;--color-border-light:#3a3a3a;--color-shadow:rgba(0, 0, 0, 0.5);}body.dark-theme .card, body.dark-theme .section, body.dark-theme .input-group, body.dark-theme input, body.dark-theme textarea, body.dark-theme select, body.dark-theme .btn{background-color:var(--color-bg-tertiary);color:var(--color-text-primary);border-color:var(--color-border);}body.dark-theme .modal, body.dark-theme .toast{background:var(--color-bg-primary);border-color:var(--color-border);}body.dark-theme .table{background:var(--color-bg-tertiary);color:var(--color-text-primary);}body.dark-theme .table th{background:var(--color-bg-secondary);border-color:var(--color-border);}body.dark-theme .table td{border-color:var(--color-border);}*, *::before, *::after{margin:0;padding:0;box-sizing:border-box;}html{font-size:16px;scroll-behavior:smooth;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}body{font-family:var(--font-body);font-size:var(--font-size-base);line-height:1.6;color:var(--color-text-primary);background-color:var(--color-bg-secondary);min-height:100vh;}h1, h2, h3, h4, h5, h6{font-family:var(--font-display);font-weight:600;line-height:1.2;color:var(--color-text-primary);margin-bottom:var(--spacing-4);}h1{font-size:var(--font-size-4xl);font-weight:700;}h2{font-size:var(--font-size-3xl);}h3{font-size:var(--font-size-2xl);}h4{font-size:var(--font-size-xl);}h5{font-size:var(--font-size-lg);}h6{font-size:var(--font-size-base);}p{margin-bottom:var(--spacing-4);color:var(--color-text-secondary);}a{color:var(--color-primary);text-decoration:none;transition:color var(--transition-fast);}a:hover{color:var(--color-primary-dark);text-decoration:underline;}.page-wrapper{min-height:100vh;background:linear-gradient(135deg, #f0f9ff 0%, #ffffff 50%, #fef3c7 100%);}.container{max-width:1600px;margin:0 auto;padding:var(--spacing-4);}.top-header{background:rgba(255, 255, 255, 0.95);backdrop-filter:blur(10px);border-bottom:1px solid var(--color-border);box-shadow:var(--shadow-sm);position:relative;animation:slideDown 0.5s ease-out;}@keyframes slideDown{from{transform:translateY(-100%);opacity:0;}to{transform:translateY(0);opacity:1;}}.header-content{max-width:1600px;margin:0 auto;padding:var(--spacing-4) var(--spacing-6);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--spacing-3);flex-wrap:wrap;}.header-title{display:flex;align-items:center;justify-content:center;width:100%;gap:var(--spacing-3);}.header-title h1{font-size:var(--font-size-3xl);font-weight:800;background:linear-gradient(135deg, var(--color-primary) 0%, var(--color-accent) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:0;text-align:center;}.version-badge{background:linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);color:white;padding:var(--spacing-1) var(--spacing-3);border-radius:var(--radius-full);font-size:var(--font-size-sm);font-weight:600;letter-spacing:0.5px;}.date-selector{display:flex;align-items:center;gap:var(--spacing-2);background:var(--color-bg-tertiary);padding:var(--spacing-2) var(--spacing-4);border-radius:var(--radius-lg);border:1px solid var(--color-border);}.date-selector label{font-size:var(--font-size-sm);font-weight:500;color:var(--color-text-secondary);}.date-selector input{border:1px solid var(--color-border);border-radius:var(--radius-md);padding:var(--spacing-2) var(--spacing-3);font-size:var(--font-size-sm);font-family:var(--font-mono);background:white;transition:all var(--transition-fast);}.date-selector input:focus{outline:none;border-color:var(--color-primary);box-shadow:0 0 0 3px rgba(37, 99, 235, 0.1);}.card{background:white;border-radius:var(--radius-xl);border:1px solid var(--color-border);box-shadow:var(--shadow-sm);margin-bottom:var(--spacing-6);transition:all var(--transition-base);overflow:hidden;}.card:hover{box-shadow:var(--shadow-md);}.card-header{display:flex;align-items:center;justify-content:space-between;padding:var(--spacing-5);background:var(--color-bg-tertiary);border-bottom:1px solid var(--color-border);cursor:pointer;user-select:none;}.card-header:hover{background:var(--color-bg-hover);}.card-title{display:flex;align-items:center;gap:var(--spacing-3);font-size:var(--font-size-lg);font-weight:600;color:var(--color-text-primary);}.card-title .icon{font-size:var(--font-size-xl);line-height:1;}.card-badge{padding:var(--spacing-1) var(--spacing-3);border-radius:var(--radius-full);font-size:var(--font-size-xs);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;}.badge-tier1{background:#fee2e2;color:var(--color-tier1);}.badge-tier2{background:#fef3c7;color:var(--color-tier2);}.badge-tier3{background:#f3f4f6;color:var(--color-tier3);}.card-content{padding:var(--spacing-6);animation:fadeIn 0.3s ease-out;}.card-header::after{content:"▼";font-size:var(--font-size-sm);transition:transform var(--transition-fast);}.card.collapsed .card-header::after{transform:rotate(-90deg);}.axioms-grid{display:grid;grid-template-columns:repeat(auto-fit, minmax(300px, 1fr));gap:var(--spacing-5);margin-top:var(--spacing-6);}.axiom-card{background:linear-gradient(135deg, #f0f9ff 0%, #ffffff 100%);border:2px solid var(--color-border);border-radius:var(--radius-lg);padding:var(--spacing-5);transition:all var(--transition-base);}.axiom-card:hover{border-color:var(--color-primary-light);box-shadow:var(--shadow-lg);transform:translateY(-4px);}.axiom-icon{font-size:var(--font-size-3xl);margin-bottom:var(--spacing-3);display:block;}.axiom-title{font-size:var(--font-size-lg);font-weight:600;color:var(--color-text-primary);margin-bottom:var(--spacing-3);}.axiom-content{font-size:var(--font-size-sm);color:var(--color-text-secondary);line-height:1.7;}.tier-list{display:flex;flex-direction:column;gap:var(--spacing-4);margin-top:var(--spacing-5);}.tier-item{display:flex;align-items:flex-start;gap:var(--spacing-4);padding:var(--spacing-4);background:var(--color-bg-secondary);border-radius:var(--radius-lg);border-left:4px solid;transition:all var(--transition-fast);}.tier-item.tier-1{border-left-color:var(--color-tier1);}.tier-item.tier-2{border-left-color:var(--color-tier2);}.tier-item.tier-3{border-left-color:var(--color-tier3);}.tier-item:hover{background:white;box-shadow:var(--shadow-sm);}.tier-badge-large{flex-shrink:0;padding:var(--spacing-2) var(--spacing-3);border-radius:var(--radius-md);font-size:var(--font-size-xs);font-weight:700;text-align:center;min-width:80px;}.tier-badge-large.tier-1{background:var(--color-tier1);color:white;}.tier-badge-large.tier-2{background:var(--color-tier2);color:white;}.tier-badge-large.tier-3{background:var(--color-tier3);color:white;}.tier-content h4{font-size:var(--font-size-base);font-weight:600;margin-bottom:var(--spacing-2);}.tier-content p{font-size:var(--font-size-sm);color:var(--color-text-secondary);margin-bottom:0;}.tier-1-section{border-left:4px solid var(--color-tier1) !important;position:relative;}.tier-1-section::before{content:'🔴 Tier 1 - 生存红线';position:absolute;top:10px;right:10px;background:var(--color-tier1);color:white;padding:4px 12px;border-radius:12px;font-size:0.75rem;font-weight:600;z-index:10;}.tier-1-section .card-header{background:linear-gradient(135deg, #fee 0%, #fff 100%) !important;}.alert{padding:var(--spacing-4) var(--spacing-5);border-radius:var(--radius-lg);border-left:4px solid;margin-bottom:var(--spacing-5);background:var(--color-bg-secondary);}.alert-info{border-left-color:var(--color-info);background:#eff6ff;}.alert-warning{border-left-color:var(--color-warning);background:#fffbeb;}.alert-danger{border-left-color:var(--color-danger);background:#fef2f2;}.alert-success{border-left-color:var(--color-success);background:#f0fdf4;}.alert h4{font-size:var(--font-size-base);font-weight:600;margin-bottom:var(--spacing-2);display:flex;align-items:center;gap:var(--spacing-2);}.alert p{font-size:var(--font-size-sm);margin-bottom:var(--spacing-2);}.alert ul{list-style:none;padding-left:0;}.alert li{padding-left:var(--spacing-5);position:relative;font-size:var(--font-size-sm);margin-bottom:var(--spacing-2);}.alert li::before{content:"•";position:absolute;left:var(--spacing-3);font-weight:bold;}.table-container{overflow-x:auto;margin:var(--spacing-5) 0;border-radius:var(--radius-lg);border:1px solid var(--color-border);}table{width:100%;border-collapse:collapse;background:white;font-size:var(--font-size-sm);}thead{background:linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);}th{padding:var(--spacing-4);text-align:left;font-weight:600;color:var(--color-text-primary);border-bottom:2px solid var(--color-border);white-space:nowrap;}th.center, td.center{text-align:center;}td{padding:var(--spacing-4);border-bottom:1px solid var(--color-border-light);vertical-align:top;}tbody tr{transition:background-color var(--transition-fast);}tbody tr:hover{background-color:var(--color-bg-hover);}tbody tr:last-child td{border-bottom:none;}td.row-header{font-weight:600;background:var(--color-bg-tertiary);color:var(--color-text-primary);}tr.summary-row{background:linear-gradient(135deg, #fef3c7 0%, #fef9c3 100%);font-weight:600;}tr.summary-row td{padding:var(--spacing-5) var(--spacing-4);}input[type="text"], input[type="number"], input[type="time"], input[type="date"], textarea, select{width:100%;padding:var(--spacing-3);border:1px solid var(--color-border);border-radius:var(--radius-md);font-size:var(--font-size-sm);font-family:var(--font-body);background:white;transition:all var(--transition-fast);}input[type="text"]:focus, input[type="number"]:focus, input[type="time"]:focus, input[type="date"]:focus, textarea:focus, select:focus{outline:none;border-color:var(--color-primary);box-shadow:0 0 0 3px rgba(37, 99, 235, 0.1);}textarea{resize:vertical;min-height:80px;font-family:var(--font-body);line-height:1.5;}input[type="checkbox"]{width:18px;height:18px;cursor:pointer;accent-color:var(--color-primary);}input[type="radio"]{width:18px;height:18px;cursor:pointer;accent-color:var(--color-primary);}label{font-size:var(--font-size-sm);font-weight:500;color:var(--color-text-primary);cursor:pointer;}.btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--spacing-2);padding:var(--spacing-3) var(--spacing-5);border:none;border-radius:var(--radius-md);font-size:var(--font-size-sm);font-weight:600;font-family:var(--font-body);cursor:pointer;transition:all var(--transition-fast);text-decoration:none;}.btn-primary{background:linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);color:white;box-shadow:var(--shadow-sm);}.btn-primary:hover{transform:translateY(-2px);box-shadow:var(--shadow-md);}.btn-secondary{background:var(--color-bg-tertiary);color:var(--color-text-primary);border:1px solid var(--color-border);}.btn-secondary:hover{background:var(--color-bg-secondary);border-color:var(--color-primary);}.btn-success{background:var(--color-success);color:white;}.btn-warning{background:var(--color-warning);color:white;}.btn-danger{background:var(--color-danger);color:white;}.score-display{display:inline-flex;align-items:center;gap:var(--spacing-2);padding:var(--spacing-2) var(--spacing-4);border-radius:var(--radius-full);font-weight:700;font-size:var(--font-size-lg);}.score-legend{background:linear-gradient(135deg, #a855f7 0%, #7c3aed 100%);color:white;}.score-excellent{background:linear-gradient(135deg, #10b981 0%, #059669 100%);color:white;}.score-good{background:linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);color:white;}.score-normal{background:linear-gradient(135deg, #f59e0b 0%, #d97706 100%);color:white;}.score-poor{background:linear-gradient(135deg, #6b7280 0%, #4b5563 100%);color:white;}.grid-2{display:grid;grid-template-columns:repeat(2, 1fr);gap:var(--spacing-5);}.grid-3{display:grid;grid-template-columns:repeat(3, 1fr);gap:var(--spacing-5);}.grid-4{display:grid;grid-template-columns:repeat(4, 1fr);gap:var(--spacing-5);}.text-center{text-align:center;}.text-right{text-align:right;}.text-bold{font-weight:600;}.text-mono{font-family:var(--font-mono);}.mt-2{margin-top:var(--spacing-2);}.mt-4{margin-top:var(--spacing-4);}.mt-6{margin-top:var(--spacing-6);}.mb-2{margin-bottom:var(--spacing-2);}.mb-4{margin-bottom:var(--spacing-4);}.mb-6{margin-bottom:var(--spacing-6);}.text-primary{color:var(--color-primary);}.text-success{color:var(--color-success);}.text-warning{color:var(--color-warning);}.text-danger{color:var(--color-danger);}.text-muted{color:var(--color-text-muted);}.bg-primary{background-color:var(--color-primary);}.bg-success{background-color:var(--color-success);}.bg-warning{background-color:var(--color-warning);}.bg-danger{background-color:var(--color-danger);}.rules-container{margin:var(--spacing-5) 0;}.rules-section{background:var(--color-bg-secondary);border-radius:var(--radius-lg);border:1px solid var(--color-border);margin-bottom:var(--spacing-4);overflow:hidden;}.rules-header{padding:var(--spacing-3) var(--spacing-4);background:var(--color-bg-tertiary);border-bottom:1px solid var(--color-border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:var(--font-size-sm);}.rules-header:hover{background:var(--color-bg-hover);}.rules-header::after{content:"▼";font-size:var(--font-size-xs);transition:transform var(--transition-fast);}.rules-section.collapsed .rules-header::after{transform:rotate(-90deg);}.rules-content{padding:var(--spacing-4);font-size:var(--font-size-sm);color:var(--color-text-secondary);}.rules-content ul{padding-left:var(--spacing-5);margin-bottom:var(--spacing-3);}.rules-content li{margin-bottom:var(--spacing-2);}.mode-selector{display:grid;grid-template-columns:repeat(auto-fit, minmax(300px, 1fr));gap:var(--spacing-4);margin-top:var(--spacing-4);}.mode-card{background:white;border:2px solid var(--color-border);border-radius:var(--radius-lg);padding:var(--spacing-4);transition:all var(--transition-base);cursor:pointer;}.mode-card:hover{border-color:var(--color-primary-light);box-shadow:var(--shadow-md);transform:translateY(-2px);}.mode-card.selected{border-color:var(--color-primary);background:var(--color-bg-hover);}.mode-header{display:flex;align-items:center;gap:var(--spacing-2);margin-bottom:var(--spacing-3);}.mode-icon{font-size:var(--font-size-xl);}.mode-title{font-size:var(--font-size-lg);font-weight:600;color:var(--color-text-primary);}.mode-tag{padding:var(--spacing-1) var(--spacing-2);border-radius:var(--radius-full);font-size:var(--font-size-xs);font-weight:600;background:var(--color-bg-tertiary);color:var(--color-text-secondary);}.mode-description{font-size:var(--font-size-sm);color:var(--color-text-secondary);margin-bottom:var(--spacing-3);}.mode-target{padding:var(--spacing-2);background:var(--color-bg-tertiary);border-radius:var(--radius-md);font-size:var(--font-size-sm);font-family:var(--font-mono);}.mode-reminder{margin-top:var(--spacing-4);padding:var(--spacing-4);border-radius:var(--radius-lg);background:linear-gradient(135deg, #fef3c7 0%, #fef9c3 100%);border-left:4px solid var(--color-warning);animation:pulse 2s infinite;}@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(245, 158, 11, 0.4);}70%{box-shadow:0 0 0 10px rgba(245, 158, 11, 0);}100%{box-shadow:0 0 0 0 rgba(245, 158, 11, 0);}}.visualization-section{margin-top:var(--spacing-6);padding:var(--spacing-5);background:white;border-radius:var(--radius-xl);border:1px solid var(--color-border);box-shadow:var(--shadow-sm);}.chart-container{position:relative;height:300px;width:100%;margin-bottom:var(--spacing-4);}.calendar-heatmap{margin-top:var(--spacing-4);padding:var(--spacing-4);background:var(--color-bg-tertiary);border-radius:var(--radius-lg);}.badges-container{display:grid;grid-template-columns:repeat(auto-fill, minmax(200px, 1fr));gap:var(--spacing-4);padding:var(--spacing-2);}.badge-item{position:relative;background:var(--color-bg-tertiary);border-radius:var(--radius-lg);padding:var(--spacing-5);text-align:center;transition:all var(--transition-base);cursor:pointer;border:2px solid transparent;overflow:hidden;}.badge-item.locked{opacity:0.4;background:linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);filter:grayscale(1);border-color:#d1d5db !important;box-shadow:none !important;}.badge-item.locked .badge-icon{opacity:0.3;filter:blur(1px);}.badge-item.locked::before{content:'🔒';position:absolute;top:var(--spacing-2);right:var(--spacing-2);font-size:var(--font-size-lg);opacity:0.4;}.badge-item.unlocked{opacity:1;filter:grayscale(0);animation:badgeGlow 2s ease-in-out infinite;transform:scale(1);}.badge-item.unlocked .badge-icon{filter:drop-shadow(0 0 8px rgba(255,255,255,0.8));transform:scale(1.1);}.badge-item.unlocked.category-peak{background:linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%);border-color:var(--color-tier1);box-shadow:0 0 20px rgba(239, 68, 68, 0.3);}.badge-item.unlocked.category-academic{background:linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%);border-color:var(--color-excellent);box-shadow:0 0 20px rgba(16, 185, 129, 0.3);}.badge-item.unlocked.category-discipline{background:linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%);border-color:var(--color-good);box-shadow:0 0 20px rgba(59, 130, 246, 0.3);}.badge-item.unlocked.category-language{background:linear-gradient(135deg, rgba(168, 85, 247, 0.1) 0%, rgba(168, 85, 247, 0.05) 100%);border-color:var(--color-legend);box-shadow:0 0 20px rgba(168, 85, 247, 0.3);}.badge-item.unlocked.category-resilience{background:linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(245, 158, 11, 0.05) 100%);border-color:var(--color-normal);box-shadow:0 0 20px rgba(245, 158, 11, 0.3);}@keyframes badgeGlow{0%, 100%{transform:scale(1);}50%{transform:scale(1.02);}}.badge-item:hover{transform:translateY(-4px) scale(1.05);}.badge-item.unlocked:hover{box-shadow:var(--shadow-xl);}.badge-icon{font-size:2.5rem;margin-bottom:var(--spacing-3);display:block;}.badge-name{font-size:var(--font-size-base);font-weight:600;color:var(--color-text-primary);margin-bottom:var(--spacing-2);}.badge-category{font-size:var(--font-size-xs);color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:var(--spacing-2);}.badge-description{font-size:var(--font-size-xs);color:var(--color-text-secondary);line-height:1.4;}.badge-progress{margin-top:var(--spacing-3);font-size:var(--font-size-xs);color:var(--color-text-muted);font-style:italic;}.report-container{padding:var(--spacing-5);background:white;border-radius:var(--radius-xl);border:1px solid var(--color-border);margin-top:var(--spacing-6);}.report-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--spacing-4);padding-bottom:var(--spacing-4);border-bottom:1px solid var(--color-border);}.mobile-optimized-table{font-size:var(--font-size-xs);}.mobile-optimized-table th, .mobile-optimized-table td{padding:var(--spacing-2);}.mobile-menu-button{display:none;position:fixed;bottom:20px;right:20px;z-index:var(--z-fixed);background:var(--color-primary);color:white;width:60px;height:60px;border-radius:50%;align-items:center;justify-content:center;box-shadow:var(--shadow-lg);font-size:var(--font-size-xl);}.writing-output-vertical{display:flex;flex-direction:column;gap:var(--spacing-2);}.writing-output-vertical-item{display:flex;align-items:center;gap:var(--spacing-2);}.writing-output-vertical-label{min-width:70px;font-size:var(--font-size-xs);font-weight:600;color:var(--color-text-secondary);}.writing-output-vertical-input{flex:1;min-width:120px;padding:var(--spacing-2);border:1px solid var(--color-border);border-radius:var(--radius-sm);font-size:var(--font-size-xs);text-align:center;}.task-column{min-width:300px !important;max-width:500px;vertical-align:top;}.task-column textarea{min-height:120px !important;resize:vertical;}.notes-column{min-width:400px !important;max-width:600px;vertical-align:top;}.data-processing-grid{display:grid;grid-template-columns:repeat(auto-fit, minmax(300px, 1fr));gap:var(--spacing-4);margin-top:var(--spacing-4);}.data-processing-card{background:var(--color-bg-tertiary);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:var(--spacing-4);}.data-processing-card h4{margin-bottom:var(--spacing-3);color:var(--color-text-primary);display:flex;align-items:center;gap:var(--spacing-2);}.export-format-buttons{display:grid;grid-template-columns:repeat(auto-fit, minmax(120px, 1fr));gap:var(--spacing-2);margin-top:var(--spacing-3);}.export-period-buttons{display:grid;grid-template-columns:repeat(4, 1fr);gap:var(--spacing-2);margin-top:var(--spacing-3);}.import-section{margin-top:var(--spacing-4);padding-top:var(--spacing-4);border-top:1px solid var(--color-border);}@media (max-width:1200px){.container{padding:var(--spacing-3);}.grid-2, .grid-3, .grid-4{grid-template-columns:1fr;}.header-content{flex-direction:column;align-items:center;}.date-selector{position:relative;right:auto;margin-top:var(--spacing-1);}.export-period-buttons{grid-template-columns:repeat(2, 1fr);}}@media (max-width:768px){html{font-size:14px;}.card-content{padding:var(--spacing-4);}.axioms-grid{grid-template-columns:1fr;}.table-container{font-size:var(--font-size-xs);}th, td{padding:var(--spacing-2);}.mode-selector{grid-template-columns:1fr;}.mobile-menu-button{display:flex;}.mobile-optimized-table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;}.card-header{padding:var(--spacing-3);}.btn-group-mobile{flex-direction:column;width:100%;}.btn-group-mobile .btn{width:100%;margin-bottom:var(--spacing-2);}.data-processing-grid{grid-template-columns:1fr;}.export-format-buttons{grid-template-columns:repeat(2, 1fr);}}@media (max-width:480px){.header-title h1{font-size:var(--font-size-xl);}.version-badge{font-size:var(--font-size-xs);}.card-title{font-size:var(--font-size-base);}.export-period-buttons{grid-template-columns:1fr;}}@media print{.no-print{display:none !important;}body{background:white;color:black;}.card{break-inside:avoid;box-shadow:none;border:1px solid #ccc;}.top-header{position:static;}.card-header{cursor:default;}.card-header::after{display:none;}.chart-container, .calendar-heatmap, .badges-container, .report-container, .visualization-section, .mobile-menu-button{display:none !important;}}@keyframes fadeIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}.fade-in{animation:fadeIn 0.5s ease-out;}.stagger-1{animation-delay:0.1s;}.stagger-2{animation-delay:0.2s;}.stagger-3{animation-delay:0.3s;}.stagger-4{animation-delay:0.4s;}.stagger-5{animation-delay:0.5s;}.writing-output-grid{display:grid;grid-template-columns:repeat(5, 1fr);gap:var(--spacing-2);margin-top:var(--spacing-1);}.writing-output-item{display:flex;flex-direction:column;}.writing-output-label{font-size:var(--font-size-xs);text-align:center;font-weight:600;margin-bottom:var(--spacing-1);color:var(--color-text-secondary);}.writing-output-input{width:100%;padding:var(--spacing-2);border:1px solid var(--color-border);border-radius:var(--radius-sm);font-size:var(--font-size-xs);text-align:center;}.status-select{min-width:100px;}.level-column{width:120px !important;}.history-date-picker{display:flex;align-items:center;gap:var(--spacing-2);margin-bottom:var(--spacing-4);}.export-buttons{display:flex;gap:var(--spacing-2);flex-wrap:wrap;margin-top:var(--spacing-4);}.exempt-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-top:1rem;}.exempt-col{background:#f8fafc;padding:1rem;border-radius:var(--radius-lg);border:1px solid var(--color-border);}@media (max-width:768px){.exempt-grid{grid-template-columns:1fr;}}#future-radar .card-content{padding:0;}.radar-controls{padding:var(--spacing-4);background:var(--color-bg-tertiary);border-bottom:1px solid var(--color-border);display:flex;gap:var(--spacing-2);flex-wrap:wrap;}.radar-section{border-bottom:1px solid var(--color-border);}.radar-section:last-child{border-bottom:none;}.radar-section-header{padding:var(--spacing-4);background:var(--color-bg-secondary);cursor:pointer;display:flex;justify-content:space-between;align-items:center;font-weight:600;transition:background var(--transition-fast);}.radar-section-header:hover{background:var(--color-bg-hover);}.radar-section-header::after{content:"▼";font-size:0.8em;transition:transform 0.3s;color:var(--color-text-muted);}.radar-section.collapsed .radar-section-header::after{transform:rotate(-90deg);}.radar-section.collapsed .radar-list{display:none;}.radar-list{padding:var(--spacing-2);background:var(--color-bg-primary);max-height:500px;overflow-y:auto;animation:fadeIn 0.3s ease;}.event-item{display:flex;gap:var(--spacing-3);padding:var(--spacing-3);border-radius:var(--radius-md);border:1px solid transparent;transition:all 0.2s;position:relative;}.event-item:hover{background:var(--color-bg-hover);border-color:var(--color-primary-light);transform:translateX(4px);}.event-date-box{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:60px;padding:4px;background:var(--color-bg-tertiary);border-radius:8px;border:1px solid var(--color-border);}.event-days-left{font-size:1.2rem;font-weight:800;color:var(--color-primary);line-height:1;}.event-days-label{font-size:0.7rem;color:var(--color-text-muted);}.event-details{flex:1;}.event-title{font-weight:600;color:var(--color-text-primary);display:flex;align-items:center;gap:6px;}.event-meta{font-size:0.85rem;color:var(--color-text-secondary);margin-top:4px;display:flex;gap:10px;align-items:center;}.event-tag{font-size:0.75rem;padding:1px 6px;border-radius:4px;background:#eee;color:#555;}.tag-urgent{background:#fee2e2;color:#dc2626;}.tag-birthday{background:#fef3c7;color:#d97706;}.event-actions{opacity:0;transition:opacity 0.2s;display:flex;align-items:center;}.event-item:hover .event-actions{opacity:1;}.delete-btn{color:var(--color-text-muted);cursor:pointer;padding:4px;}.delete-btn:hover{color:var(--color-danger);}#json-import-area{width:100%;height:150px;font-family:monospace;font-size:12px;padding:10px;border:1px solid var(--color-border);border-radius:8px;margin-bottom:10px;}.event-type-tabs{display:flex;gap:8px;margin-bottom:16px;border-bottom:2px solid var(--color-border);padding-bottom:8px}.event-tab{padding:8px 16px;background:0 0;border:none;border-bottom:2px solid transparent;cursor:pointer;font-weight:500;color:var(--color-text-secondary);transition:all .15s;margin-bottom:-2px}.event-tab:hover{color:var(--color-primary)}.event-tab.active{color:var(--color-primary);border-bottom-color:var(--color-primary)}.event-container{display:none}.event-container.active{display:block}.event-item{background:var(--color-bg-primary);border:1px solid var(--color-border);border-radius:8px;margin-bottom:12px;overflow:hidden;transition:all .15s}.event-item:hover{box-shadow:var(--shadow-md);border-color:var(--color-primary)}.event-item-header{padding:12px 16px;background:var(--color-bg-secondary);cursor:pointer;display:flex;justify-content:space-between;align-items:center;user-select:none}.event-item-header:hover{background:var(--color-bg-hover)}.event-item-title{display:flex;align-items:center;gap:8px;flex:1}.event-item-title .event-name{font-weight:600;color:var(--color-text-primary)}.event-item-title .event-time{color:var(--color-text-muted);font-size:14px;margin-left:8px}.event-status-badge{padding:2px 8px;border-radius:4px;font-size:12px;font-weight:600}.event-status-upcoming{background:#dbeafe;color:#1e40af}.event-status-today{background:#fef3c7;color:#92400e}.event-collapse-icon{transition:transform .25s;color:var(--color-text-muted)}.event-item-header.collapsed .event-collapse-icon{transform:rotate(-90deg)}.event-item-content{padding:16px;max-height:500px;overflow:hidden;transition:all .35s}.event-item-content.collapsed{max-height:0;padding-top:0;padding-bottom:0}.event-field{display:grid;grid-template-columns:120px 1fr;gap:12px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--color-border-light)}.event-field:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}.event-field-label{font-weight:600;color:var(--color-text-secondary);font-size:14px}.add-event-form{background:var(--color-bg-secondary);padding:16px;border-radius:12px;margin-bottom:16px}.form-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;margin-bottom:16px}.calendar-type-switch{display:flex;gap:8px;margin-bottom:12px}.calendar-type-btn{padding:8px 12px;border:1px solid var(--color-border);background:var(--color-bg-primary);border-radius:8px;cursor:pointer;transition:all .15s;font-size:14px}.calendar-type-btn:hover{border-color:var(--color-primary)}.calendar-type-btn.active{background:var(--color-primary);color:#fff;border-color:var(--color-primary)}.sync-status.sync-status@media (max-width:768px){.event-field{grid-template-columns:1fr;gap:4px}.form-row{grid-template-columns:1fr}.event-item-header{flex-direction:column;align-items:flex-start;gap:8px}}.timeline-container{position:relative;padding-left:40px;}.timeline-item{position:relative;margin-bottom:30px;padding-bottom:20px;}.timeline-item:not(:last-child):before{content:'';position:absolute;left:-25px;top:35px;width:2px;height:calc(100% - 15px);background:linear-gradient(180deg, var(--color-border) 0%, transparent 100%);}.timeline-badge{position:absolute;left:-40px;top:0;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 8px rgba(0,0,0,0.1);}.timeline-content{background:var(--color-bg-secondary);padding:var(--spacing-4);border-radius:var(--radius-lg);border-left:3px solid var(--color-primary);}.timeline-content h4{margin-top:0;margin-bottom:var(--spacing-2);color:var(--color-primary);}
-  
-/* ===== Login UI tweak: Token wider + Login button inline (2026-02-12) ===== */
-.tpi-token-row{
-  display:flex;
-  align-items:center;
-  gap:14px;
-}
-
-#gistToken{
-  flex:1;
-  min-width:420px;
-  padding:10px 14px;
-  font-size:15px;
-  border-radius:8px;
-}
-
-.tpi-login-btn{
-  white-space:nowrap;
-  padding:10px 18px;
-  font-size:14px;
-}
-
-</style>
+  </style>
 <!-- ========== 增强导航系统样式 第 20 版 ========== -->
 <style>
    /* 补全模态框基础样式 */
@@ -2553,159 +2974,6 @@ window.exportReportComplete = function(format) {
 .radar-attach-list{ font-style:italic; }
 </style>
 
-<style>
-/* =========================================================
-   UI 微调补丁：仅优化【云端同步】与【未来事件雷达】布局
-   - 不改按钮/输入框/模块结构与功能
-========================================================= */
-
-/* ---- 云端同步：更紧凑、对齐、可换行 ---- */
-#cloud-sync-section .tpi-sync-panel{max-width:980px;margin:0 auto;}
-#cloud-sync-section .tpi-sync-grid{
-  display:grid;
-  grid-template-columns:repeat(12,minmax(0,1fr));
-  gap:12px;
-  align-items:end;
-}
-#cloud-sync-section .tpi-field{grid-column:span 6;}
-#cloud-sync-section .tpi-field-wide{grid-column:span 12;}
-#cloud-sync-section .tpi-field label{
-  display:block;
-  margin:0 0 6px;
-  font-weight:700;
-  color:#374151;
-  font-size:13px;
-}
-#cloud-sync-section .tpi-field input{
-  width:100%;
-  padding:10px 12px;
-  border:2px solid #e5e7eb;
-  border-radius:10px;
-  font-size:14px;
-  outline:none;
-}
-#cloud-sync-section .tpi-field input:focus{border-color:#93c5fd; box-shadow:0 0 0 3px rgba(59,130,246,.15);}
-#cloud-sync-section .tpi-field-muted input{
-  background:#f9fafb;
-  color:#6b7280;
-}
-#cloud-sync-section .tpi-help{
-  margin-top:8px;
-  font-size:12px;
-  color:#6b7280;
-  line-height:1.45;
-}
-#cloud-sync-section .tpi-actions{
-  grid-column:span 12;
-  display:flex;
-  gap:10px;
-  flex-wrap:wrap;
-  justify-content:flex-start;
-}
-#cloud-sync-section .tpi-btn{
-  padding:10px 14px;
-  border:none;
-  border-radius:10px;
-  font-weight:700;
-  cursor:pointer;
-  line-height:1;
-  user-select:none;
-}
-#cloud-sync-section .tpi-btn:active{transform:translateY(1px);}
-#cloud-sync-section .tpi-btn-purple{background:linear-gradient(135deg,#8b5cf6,#7c3aed);color:#fff;}
-#cloud-sync-section .tpi-btn-green{background:linear-gradient(135deg,#10b981,#059669);color:#fff;}
-#cloud-sync-section .tpi-btn-blue{background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;}
-#cloud-sync-section .tpi-btn-cyan{background:linear-gradient(135deg,#06b6d4,#0891b2);color:#fff;}
-#cloud-sync-section .tpi-btn-red{background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;}
-#cloud-sync-section .tpi-btn-ghost{background:#f3f4f6;border:1px solid #e5e7eb;color:#111827;}
-#cloud-sync-section .tpi-msg{margin-top:10px;font-size:14px;min-height:18px;}
-#cloud-sync-section .tpi-submsg{margin-top:6px;font-size:13px;opacity:.9;min-height:16px;}
-#cloud-sync-section .tpi-sync-toolbar{
-  display:flex;
-  flex-wrap:wrap;
-  gap:10px 12px;
-  align-items:center;
-}
-#cloud-sync-section .tpi-sync-date{
-  display:flex;
-  gap:8px;
-  align-items:center;
-  flex-wrap:wrap;
-}
-#cloud-sync-section .tpi-sync-date input[type="date"]{
-  padding:8px 10px;
-  border:2px solid #e5e7eb;
-  border-radius:10px;
-  font-size:14px;
-}
-#cloud-sync-section .tpi-label{font-weight:800;color:#374151;}
-#cloud-sync-section .tpi-sync-auto{
-  display:flex;
-  gap:8px;
-  align-items:center;
-  cursor:pointer;
-  user-select:none;
-  padding:6px 10px;
-  border:1px solid #e5e7eb;
-  border-radius:12px;
-  background:#fafafa;
-}
-#cloud-sync-section .tpi-sync-user{font-weight:800;color:#111827;}
-#cloud-sync-section .tpi-sync-buttons{
-  display:flex;
-  gap:10px;
-  flex-wrap:wrap;
-  align-items:center;
-}
-
-/* 小屏：更自然换行 */
-@media (max-width: 760px){
-  #cloud-sync-section .tpi-field{grid-column:span 12;}
-}
-
-/* ---- 未来事件雷达：控件条对齐 + 内容留白 ---- */
-#future-radar .radar-controls{
-  display:flex;
-  flex-wrap:wrap;
-  justify-content:space-between;
-  gap:10px 12px;
-  padding:12px 14px;
-  border-bottom:1px solid #e5e7eb;
-  background:#fff;
-}
-#future-radar .radar-controls .misc-log-actions{
-  display:flex;
-  flex-wrap:wrap;
-  gap:8px;
-}
-#future-radar .card-content{padding:0 !important;}
-#future-radar .radar-section{
-  padding:0 14px 14px;
-}
-#future-radar .radar-section-header{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  padding:10px 12px;
-  margin-top:12px;
-  border:1px solid #e5e7eb;
-  border-radius:12px;
-  background:#f9fafb;
-}
-#future-radar .radar-list{margin-top:8px;}
-#future-radar .completed-list{margin-top:8px;}
-</style>
-
-<style>
-/* =========================
-   Cloud Sync UI Polish (Token-only)
-========================= */
-.tpi-sync-card .tpi-sync-grid{gap:12px;}
-.tpi-sync-card .tpi-token-only input{height:42px;border-radius:12px;}
-.tpi-sync-card .tpi-actions-right{display:flex;justify-content:flex-end;gap:10px;}
-.tpi-sync-card .tpi-actions-right .tpi-btn{min-width:120px;height:40px;border-radius:12px;}
-</style>
-
 </head>
                 <body>
                     ${reportContent.innerHTML}
@@ -2805,22 +3073,26 @@ window.exportReportComplete = function(format) {
     }
 };
 
-// 2. 从云端加载函数 - 现在使用GitHub云端同步
+// 2. 从云端加载函数 - 现在使用GitHub Gist云端同步
 window.loadFromCloudComplete = function() {
     console.log('🔵 [loadFromCloudComplete] 从云端加载功能被调用');
     console.log('🔵 [loadFromCloudComplete] 执行时间:', new Date().toLocaleString());
     
     try {
-        // Firebase已移除，现在使用GitHub云端同步
-        console.log('🔍 [loadFromCloudComplete] 使用GitHub云端同步方式');
+        // Firebase已移除，现在使用GitHub Gist云端同步
+        console.log('🔍 [loadFromCloudComplete] 使用GitHub Gist云端同步方式');
         
-        // 检查GitHub加载函数是否可用
-        if (window.loadFromGitHub && typeof window.loadFromGitHub === 'function') {
-            console.log('✅ [loadFromCloudComplete] 调用GitHub加载功能');
-            window.loadFromGitHub();
+        // 检查Gist加载函数是否可用
+        if (window.loadFromGist && typeof window.loadFromGist === 'function') {
+            console.log('✅ [loadFromCloudComplete] 调用Gist加载功能');
+            const dateKey = (document.getElementById('date-input') && document.getElementById('date-input').value) ? document.getElementById('date-input').value : null;
+            window.loadFromGist(dateKey);
+        } else if (window.tpiLoadToday && typeof window.tpiLoadToday === 'function') {
+            console.log('✅ [loadFromCloudComplete] 调用tpiLoadToday功能');
+            window.tpiLoadToday();
         } else {
             console.warn('⚠️ [loadFromCloudComplete] GitHub加载功能未初始化');
-            alert('⚠️ GitHub云端同步功能初始化中\n\n请稍等片刻后重试\n\n如果持续出现此问题，请刷新页面');
+            alert('⚠️ GitHub Gist 云端同步功能初始化中\n\n请稍等片刻后重试\n\n如果持续出现此问题，请刷新页面');
         }
     } catch (error) {
         console.error('❌ [loadFromCloudComplete] 从云端加载失败:', error);
@@ -2830,109 +3102,7 @@ window.loadFromCloudComplete = function() {
 };
 
 // 3. 备份管理函数
-window.openBackupManagerComplete = function() {
-    console.log('💾 [openBackupManagerComplete] 被调用');
-    console.log('💾 [openBackupManagerComplete] 执行时间:', new Date().toLocaleString());
-    
-    try {
-        // 创建备份管理器对话框
-        const backupKeys = [];
-        
-        console.log('🔍 [openBackupManagerComplete] 开始扫描备份...');
-        
-        // 从 localStorage 获取所有备份
-        for (let i = 0; i < __tpi_ls_length(); i++) {
-            const key = __tpi_ls_key(i);
-            if (key && key.startsWith('tpi_backup_')) {
-                backupKeys.push(key);
-            }
-        }
-        
-        console.log('📊 [openBackupManagerComplete] 找到', backupKeys.length, '个备份');
-        
-        // 按时间倒序排列
-        backupKeys.sort().reverse();
-        
-        // 创建备份列表HTML
-        let backupListHtml = '';
-        if (backupKeys.length === 0) {
-            backupListHtml = '<p style="text-align: center; color: #6b7280; padding: 20px;">暂无备份记录</p>';
-        } else {
-            backupListHtml = '<div style="max-height: 300px; overflow-y: auto;">';
-            backupKeys.forEach((key, index) => {
-                try {
-                    const backupData = JSON.parse(__tpi_ls_get(key));
-                    const backupTime = key.replace('tpi_backup_', '').replace(/_/g, ' ');
-                    const dataSize = new Blob([__tpi_ls_get(key)]).size;
-                    const sizeKB = (dataSize / 1024).toFixed(2);
-                    
-                    backupListHtml += `
-                        <div style="padding: 12px; margin-bottom: 8px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f9fafb;">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <div>
-                                    <strong>备份 #${backupKeys.length - index}</strong>
-                                    <br>
-                                    <small style="color: #6b7280;">时间: ${backupTime}</small>
-                                    <br>
-                                    <small style="color: #6b7280;">大小: ${sizeKB} KB</small>
-                                </div>
-                                <div style="display: flex; gap: 8px;">
-                                    <button class="btn btn-sm btn-primary" onclick="restoreBackup('${key}'); document.getElementById('backup-manager-modal').remove();" style="font-size: 12px; padding: 4px 8px;">📥 恢复</button>
-                                    <button class="btn btn-sm btn-danger" onclick="deleteBackup('${key}'); window.openBackupManagerComplete();" style="font-size: 12px; padding: 4px 8px;">🗑️ 删除</button>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                } catch (e) {
-                    console.error('❌ [openBackupManagerComplete] 读取备份失败:', e);
-                }
-            });
-            backupListHtml += '</div>';
-        }
-        
-        // 创建模态框
-        const modalHtml = `
-            <div id="backup-manager-modal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10000; display: flex; align-items: center; justify-content: center;" onclick="this.remove()">
-                <div style="background: white; padding: 30px; border-radius: 12px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto;" onclick="event.stopPropagation()">
-                    <h3 style="margin-bottom: 20px; color: #111827;">💾 备份管理器</h3>
-                    
-                    <div style="margin-bottom: 20px;">
-                        <button class="btn btn-primary tpi-inline-02" onclick="createNewBackup(); window.openBackupManagerComplete();">
-                            ➕ 创建新备份
-                        </button>
-                    </div>
-                    
-                    <h4 style="margin-bottom: 12px; font-size: 16px; color: #374151;">备份历史</h4>
-                    ${backupListHtml}
-                    
-                    <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
-                        <button class="btn btn-secondary tpi-inline-02" onclick="document.getElementById('backup-manager-modal').remove();">关闭</button>
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        // 移除旧的模态框（如果存在）
-        const oldModal = document.getElementById('backup-manager-modal');
-        if (oldModal) {
-            console.log('🔄 [openBackupManagerComplete] 移除旧的模态框');
-            oldModal.remove();
-        }
-        
-        // 添加新模态框
-        const modal = document.createElement('div');
-        modal.innerHTML = modalHtml;
-        document.body.appendChild(modal.firstElementChild);
-        
-        console.log('✅ [openBackupManagerComplete] 备份管理器已打开');
-        
-    } catch (error) {
-        console.error('❌ [openBackupManagerComplete] 打开失败:', error);
-        console.error('❌ [openBackupManagerComplete] 错误堆栈:', error.stack);
-        alert('❌ 打开备份管理器失败\n\n错误信息: ' + error.message + '\n\n请查看控制台获取详细信息');
-    }
-};
-
+window.openBackupManagerComplete = function(){ try{ alert('ℹ️ 备份管理器（备份历史列表/恢复/删除）已移除'); }catch(e){} };
 // 4. 创建新备份函数
 window.createNewBackup = function() {
     console.log('💾 [createNewBackup] 被调用');
@@ -3009,31 +3179,7 @@ window.restoreBackup = function(backupKey) {
 };
 
 // 6. 删除备份函数
-window.deleteBackup = function(backupKey) {
-    console.log('🗑️ [deleteBackup] 被调用');
-    console.log('🗑️ [deleteBackup] 备份键:', backupKey);
-    console.log('🗑️ [deleteBackup] 执行时间:', new Date().toLocaleString());
-    
-    try {
-        if (!confirm('确定要删除此备份吗？\n\n此操作不可撤销！')) {
-            console.log('❌ [deleteBackup] 用户取消操作');
-            return;
-        }
-        
-        console.log('🔍 [deleteBackup] 开始删除备份...');
-        
-        __tpi_ls_remove(backupKey);
-        
-        console.log('✅ [deleteBackup] 备份已删除');
-        
-        alert('✅ 备份已删除');
-    } catch (error) {
-        console.error('❌ [deleteBackup] 删除失败:', error);
-        console.error('❌ [deleteBackup] 错误堆栈:', error.stack);
-        alert('❌ 删除备份失败\n\n错误信息: ' + error.message);
-    }
-};
-
+window.deleteBackup = function(){ try{ alert('ℹ️ 备份管理器已移除：无法在此处删除备份'); }catch(e){} };
 // 7. 安全的Toast显示函数（用于InputValidator未初始化时）
 window.safeShowToast = function(message, type) {
     console.log('📢 [safeShowToast] 被调用');
@@ -4265,8 +4411,11 @@ window.__tpi_legacy_loadTpiData_2 = function() {
 ========================================================= */
 
 (function(){
-  // 强制绑定真实实现：即使启动阶段已生成过兜底 stub，也覆盖掉
-
+  // ✅ 修复：某些版本里 loadTpiData 先被生成了“占位/空函数”，导致按钮点击无反应
+  // 这里仅在“未定义”或“占位实现”时覆盖，不影响真正的实现
+  const __existing = window.loadTpiData;
+  const __isPlaceholder = (typeof __existing === 'function') && /占位|stub|TODO|not implemented|return\s*false|console\.warn\(\'loadTpiData\'|暂无/i.test(String(__existing));
+  if (typeof __existing === 'function' && !__isPlaceholder) return;
 
   function _safeParse(str){
     try{ return (typeof window.safeJSONParseEarly === 'function') ? window.safeJSONParseEarly(str) : JSON.parse(str); }
@@ -4685,8 +4834,6 @@ window.exportAsCSV = function() {
 </div>
 </div>
 </header>
-<p style="color:#888; font-size:12px; margin-top:-8px; text-align:center;">提示：点击“从云端下载”加载当天历史记录</p>
-
 <!--
 ═══════════════════════════════════════════════════════════════
   TPI系统修复记录 - 剩余问题修复批次 2/3
@@ -9597,7 +9744,7 @@ else FutureRadar.init();
 <input aria-label="超级心流" class="tpi-u-mt-4px" name="bonus-item" onchange="TPI.calculateBonus(); TPI.calculateSystem()" type="checkbox" value="flow"/>
 <div>
 <span class="tpi-u-fw-600">
-            🔥 超级心流奖 (+5)
+            🔥 超级心流奖 (+3)
            </span>
 <small class="text-muted" style="display: block; font-size: 0.75rem; line-height: 1.3;">
             AMI ≥3个时段 F=1.3
@@ -9608,7 +9755,7 @@ else FutureRadar.init();
 <input aria-label="攻坚勇士" class="tpi-u-mt-4px" name="bonus-item" onchange="TPI.calculateBonus(); TPI.calculateSystem()" type="checkbox" value="warrior"/>
 <div>
 <span class="tpi-u-fw-600">
-            🧗 攻坚勇士奖 (+7)
+            🧗 攻坚勇士奖 (+4)
            </span>
 <small class="text-muted" style="display: block; font-size: 0.75rem; line-height: 1.3;">
             完成 ≥3个 Type D 任务
@@ -9619,7 +9766,7 @@ else FutureRadar.init();
 <input aria-label="完美作息" class="tpi-u-mt-4px" name="bonus-item" onchange="TPI.calculateBonus(); TPI.calculateSystem()" type="checkbox" value="balance"/>
 <div>
 <span class="tpi-u-fw-600">
-            ⚖️ 完美作息平衡奖 (+5)
+            ⚖️ 完美作息平衡奖 (+3)
            </span>
 <small class="text-muted" style="display: block; font-size: 0.75rem; line-height: 1.3;">
             晨间入馆 &lt;08:45 &amp; 睡眠 &lt;00:00 &amp; 午晚双坚守
@@ -9646,7 +9793,7 @@ else FutureRadar.init();
 <input aria-label="状态回升" class="tpi-u-mt-4px" name="bonus-item" onchange="TPI.calculateBonus(); TPI.calculateSystem()" type="checkbox" value="return"/>
 <div>
 <span class="tpi-u-fw-600">
-            🏆 状态回升奖 (+7)
+            🏆 状态回升奖 (+4)
            </span>
 <small class="text-muted" style="display: block; font-size: 0.75rem; line-height: 1.3;">
             前一日 TPI &lt; 95 &amp; 本日 TPI ≥ 140
@@ -9657,7 +9804,7 @@ else FutureRadar.init();
 <input aria-label="卓越表现" class="tpi-u-mt-4px" name="bonus-item" onchange="TPI.calculateBonus(); TPI.calculateSystem()" type="checkbox" value="excellent"/>
 <div>
 <span class="tpi-u-fw-600">
-            💎 卓越表现奖 (+5)
+            💎 卓越表现奖 (+4)
            </span>
 <small class="text-muted" style="display: block; font-size: 0.75rem; line-height: 1.3;">
             本日 TPI ≥ 160
@@ -9668,18 +9815,35 @@ else FutureRadar.init();
 <input aria-label="快速恢复" class="tpi-u-mt-4px" name="bonus-item" onchange="TPI.calculateBonus(); TPI.calculateSystem()" type="checkbox" value="recovery"/>
 <div>
 <span class="tpi-u-fw-600">
-            🔄 快速恢复奖 (+3)
+            🔄 快速恢复奖 (+2)
            </span>
 <small class="text-muted" style="display: block; font-size: 0.75rem; line-height: 1.3;">
             切回常态首日 TPI ≥ 130
            </small>
 </div>
 </label>
+
+<label onmouseout="this.style.background='transparent'" onmouseover="this.style.background='rgba(0,0,0,0.03)'" style="display: flex; align-items: flex-start; gap: var(--spacing-2); cursor: pointer; padding: 4px; border-radius: 4px; transition: background 0.2s;">
+  <input aria-label="高强度稳定日" class="tpi-u-mt-4px" name="bonus-item" onchange="TPI.calculateBonus(); TPI.calculateSystem()" type="checkbox" value="bonus_deep_review"/>
+  <div>
+    <span class="tpi-u-fw-600">🏋️ 高强度稳定日 (+3)</span>
+    <small class="text-muted" style="display: block; font-size: 0.75rem; line-height: 1.3;">当日强度较高仍保持稳定输出（建议：TPI≥140且核心维度无明显短板）</small>
+  </div>
+</label>
+
+<label onmouseout="this.style.background='transparent'" onmouseover="this.style.background='rgba(0,0,0,0.03)'" style="display: flex; align-items: flex-start; gap: var(--spacing-2); cursor: pointer; padding: 4px; border-radius: 4px; transition: background 0.2s;">
+  <input aria-label="抗干扰稳态" class="tpi-u-mt-4px" name="bonus-item" onchange="TPI.calculateBonus(); TPI.calculateSystem()" type="checkbox" value="bonus_steady"/>
+  <div>
+    <span class="tpi-u-fw-600">🛡️ 抗干扰稳态奖 (+2)</span>
+    <small class="text-muted" style="display: block; font-size: 0.75rem; line-height: 1.3;">遭遇干扰/波动仍保持关键任务推进与作息底线（自评）</small>
+  </div>
+</label>
+
 <label onmouseout="this.style.background='transparent'" onmouseover="this.style.background='rgba(0,0,0,0.03)'" style="display: flex; align-items: flex-start; gap: var(--spacing-2); cursor: pointer; padding: 4px; border-radius: 4px; transition: background 0.2s;">
 <input aria-label="连续稳定7日" class="tpi-u-mt-4px" name="bonus-item" onchange="TPI.calculateBonus(); TPI.calculateSystem()" type="checkbox" value="streak7"/>
 <div>
 <span class="tpi-u-fw-600">
-            📊 连续稳定(7日) (+3)
+            📊 连续稳定(7日) (+2)
            </span>
 <small class="text-muted" style="display: block; font-size: 0.75rem; line-height: 1.3;">
             TPI ≥ 120 (第7日获得)
@@ -9690,7 +9854,7 @@ else FutureRadar.init();
 <input aria-label="连续稳定14日" class="tpi-u-mt-4px" name="bonus-item" onchange="TPI.calculateBonus(); TPI.calculateSystem()" type="checkbox" value="streak14"/>
 <div>
 <span class="tpi-u-fw-600">
-            📊 连续稳定(14日) (+5)
+            📊 连续稳定(14日) (+3)
            </span>
 <small class="text-muted" style="display: block; font-size: 0.75rem; line-height: 1.3;">
             TPI ≥ 120 (第14日获得)
@@ -9701,7 +9865,7 @@ else FutureRadar.init();
 <input aria-label="连续稳定21日" class="tpi-u-mt-4px" name="bonus-item" onchange="TPI.calculateBonus(); TPI.calculateSystem()" type="checkbox" value="streak21"/>
 <div>
 <span class="tpi-u-fw-600">
-            📊 连续稳定(21日) (+7)
+            📊 连续稳定(21日) (+5)
            </span>
 <small class="text-muted" style="display: block; font-size: 0.75rem; line-height: 1.3;">
             TPI ≥ 120 (第21日获得)
@@ -10746,10 +10910,6 @@ else FutureRadar.init();
 </td>
 <td class="center">
 <select aria-label="上午状态" class="status-select" onchange="TPI.calculateAMI()">
-
-<option value="" selected>
-              ⬜ 未选择
-             </option>
 <option value="1">
               ✅ 完成
              </option>
@@ -10935,10 +11095,6 @@ else FutureRadar.init();
 </td>
 <td class="center">
 <select aria-label="下午状态" class="status-select" onchange="TPI.calculateAMI()">
-
-<option value="" selected>
-              ⬜ 未选择
-             </option>
 <option value="1">
               ✅ 完成
              </option>
@@ -11125,10 +11281,6 @@ else FutureRadar.init();
 </td>
 <td class="center">
 <select aria-label="晚上1状态" class="status-select" onchange="TPI.calculateAMI()">
-
-<option value="" selected>
-              ⬜ 未选择
-             </option>
 <option value="1">
               ✅ 完成
              </option>
@@ -11321,10 +11473,6 @@ else FutureRadar.init();
 </td>
 <td class="center">
 <select aria-label="晚上2状态" class="status-select" onchange="TPI.calculateAMI()">
-
-<option value="" selected>
-              ⬜ 未选择
-             </option>
 <option value="1">
               ✅ 完成
              </option>
@@ -11515,10 +11663,6 @@ else FutureRadar.init();
 </td>
 <td class="center">
 <select aria-label="机动状态" class="status-select" onchange="TPI.calculateAMI()">
-
-<option value="" selected>
-              ⬜ 未选择
-             </option>
 <option value="1">
               ✅ 完成
              </option>
@@ -12089,10 +12233,6 @@ else FutureRadar.init();
 </td>
 <td class="center">
 <select aria-label="晨间入馆状态" class="status-select tpi-inline-01" onchange="calculateMorningScore(); calculateBCM(); calculateTPI();">
-
-<option value="" selected>
-              ⬜ 未选择
-             </option>
 <option value="1">
               ✅ 完成
              </option>
@@ -12222,21 +12362,11 @@ else FutureRadar.init();
 </td>
 <td class="center">
 <select aria-label="午间防守状态" class="status-select tpi-inline-01" onchange="TPI.calculateAMI()">
-
-<option value="" selected>
-              ⬜ 未选择
-             </option>
 <option value="1">
               ✅ 完成
              </option>
-<option value="0">
-              ⭕ 未完成
-             </option>
 <option value="exempt">
               🛡️ 豁免
-             </option>
-<option value="other">
-              🔍 其他
              </option>
 </select>
 </td>
@@ -12354,21 +12484,11 @@ else FutureRadar.init();
 </td>
 <td class="center">
 <select aria-label="晚间防守状态" class="status-select tpi-inline-01" onchange="TPI.calculateAMI()">
-
-<option value="" selected>
-              ⬜ 未选择
-             </option>
 <option value="1">
               ✅ 完成
              </option>
-<option value="0">
-              ⭕ 未完成
-             </option>
 <option value="exempt">
               🛡️ 豁免
-             </option>
-<option value="other">
-              🔍 其他
              </option>
 </select>
 </td>
@@ -12454,10 +12574,6 @@ else FutureRadar.init();
 </td>
 <td class="center">
 <select aria-label="晚间离馆状态" class="status-select tpi-inline-01" onchange="TPI.calculateAMI()">
-
-<option value="" selected>
-              ⬜ 未选择
-             </option>
 <option value="1">
               ✅ 完成
              </option>
@@ -12582,10 +12698,6 @@ else FutureRadar.init();
 </td>
 <td class="center">
 <select aria-label="睡眠状态" class="status-select tpi-inline-01" onchange="calculateSleepScore(); calculateBCM(); calculateTPI();">
-
-<option value="" selected>
-              ⬜ 未选择
-             </option>
 <option value="1">
               ✅ 完成
              </option>
@@ -12652,10 +12764,6 @@ else FutureRadar.init();
 </td>
 <td class="center">
 <select aria-label="数字气隙状态" class="status-select tpi-inline-01" id="bcm-digital-status" onchange="TPI.calculateAMI()">
-
-<option value="" selected>
-              ⬜ 未选择
-             </option>
 <option value="1">
               ✅ 完成
              </option>
@@ -12703,10 +12811,6 @@ else FutureRadar.init();
 </td>
 <td class="center">
 <select aria-label="下午学习维持状态" class="status-select tpi-inline-01" id="bcm-afternoon-status" onchange="TPI.calculateAMI()">
-
-<option value="" selected>
-              ⬜ 未选择
-             </option>
 <option value="1">
               ✅ 完成
              </option>
@@ -12908,10 +13012,6 @@ else FutureRadar.init();
 </td>
 <td class="center">
 <select aria-label="核心运动状态" class="status-select tpi-inline-01" id="hsm-core-status" onchange="TPI.calculateAMI()">
-
-<option value="" selected>
-              ⬜ 未选择
-             </option>
 <option value="1">
               ✅ 完成
              </option>
@@ -12953,10 +13053,6 @@ else FutureRadar.init();
 </td>
 <td class="center">
 <select aria-label="上午微运动状态" class="status-select tpi-inline-01" id="hsm-morning-status" onchange="TPI.calculateAMI()">
-
-<option value="" selected>
-              ⬜ 未选择
-             </option>
 <option value="1">
               ✅ 完成
              </option>
@@ -12998,10 +13094,6 @@ else FutureRadar.init();
 </td>
 <td class="center">
 <select aria-label="下午微运动状态" class="status-select tpi-inline-01" id="hsm-afternoon-status" onchange="TPI.calculateAMI()">
-
-<option value="" selected>
-              ⬜ 未选择
-             </option>
 <option value="1">
               ✅ 完成
              </option>
@@ -13039,10 +13131,6 @@ else FutureRadar.init();
 </td>
 <td class="center">
 <select aria-label="上午喝水状态" class="status-select tpi-inline-01" id="hsm-water-morning-status" onchange="TPI.calculateAMI()">
-
-<option value="" selected>
-              ⬜ 未选择
-             </option>
 <option value="1">
               ✅ 完成
              </option>
@@ -13080,10 +13168,6 @@ else FutureRadar.init();
 </td>
 <td class="center">
 <select aria-label="下午喝水状态" class="status-select tpi-inline-01" id="hsm-water-afternoon-status" onchange="TPI.calculateAMI()">
-
-<option value="" selected>
-              ⬜ 未选择
-             </option>
 <option value="1">
               ✅ 完成
              </option>
@@ -13121,10 +13205,6 @@ else FutureRadar.init();
 </td>
 <td class="center">
 <select aria-label="晚上喝水状态" class="status-select tpi-inline-01" id="hsm-water-evening-status" onchange="TPI.calculateAMI()">
-
-<option value="" selected>
-              ⬜ 未选择
-             </option>
 <option value="1">
               ✅ 完成
              </option>
@@ -13332,10 +13412,6 @@ else FutureRadar.init();
 </td>
 <td class="center">
 <select aria-label="核心学习状态" class="status-select tpi-inline-01" onchange="TPI.calculateAMI()">
-
-<option value="" selected>
-              ⬜ 未选择
-             </option>
 <option value="1">
               ✅ 完成
              </option>
@@ -13403,10 +13479,6 @@ else FutureRadar.init();
 </td>
 <td class="center">
 <select aria-label="碎片磨耳状态" class="status-select tpi-inline-01" onchange="TPI.calculateAMI()">
-
-<option value="" selected>
-              ⬜ 未选择
-             </option>
 <option value="1">
               ✅ 完成
              </option>
@@ -13610,10 +13682,6 @@ else FutureRadar.init();
 </td>
 <td class="center">
 <select aria-label="待办事项1状态" class="status-select logistics-status">
-
-<option value="" selected>
-              ⬜ 未选择
-             </option>
 <option value="1">
               ✅ 完成
              </option>
@@ -13666,10 +13734,6 @@ else FutureRadar.init();
 </td>
 <td class="center">
 <select aria-label="待办事项2状态" class="status-select logistics-status">
-
-<option value="" selected>
-              ⬜ 未选择
-             </option>
 <option value="1">
               ✅ 完成
              </option>
@@ -13722,10 +13786,6 @@ else FutureRadar.init();
 </td>
 <td class="center">
 <select aria-label="待办事项3状态" class="status-select logistics-status">
-
-<option value="" selected>
-              ⬜ 未选择
-             </option>
 <option value="1">
               ✅ 完成
              </option>
@@ -13778,10 +13838,6 @@ else FutureRadar.init();
 </td>
 <td class="center">
 <select aria-label="待办事项4状态" class="status-select logistics-status">
-
-<option value="" selected>
-              ⬜ 未选择
-             </option>
 <option value="1">
               ✅ 完成
              </option>
@@ -13834,10 +13890,6 @@ else FutureRadar.init();
 </td>
 <td class="center">
 <select aria-label="待办事项5状态" class="status-select logistics-status">
-
-<option value="" selected>
-              ⬜ 未选择
-             </option>
 <option value="1">
               ✅ 完成
              </option>
@@ -13890,10 +13942,6 @@ else FutureRadar.init();
 </td>
 <td class="center">
 <select aria-label="待办事项6状态" class="status-select logistics-status">
-
-<option value="" selected>
-              ⬜ 未选择
-             </option>
 <option value="1">
               ✅ 完成
              </option>
@@ -13946,10 +13994,6 @@ else FutureRadar.init();
 </td>
 <td class="center">
 <select aria-label="待办事项7状态" class="status-select logistics-status">
-
-<option value="" selected>
-              ⬜ 未选择
-             </option>
 <option value="1">
               ✅ 完成
              </option>
@@ -14002,10 +14046,6 @@ else FutureRadar.init();
 </td>
 <td class="center">
 <select aria-label="待办事项8状态" class="status-select logistics-status">
-
-<option value="" selected>
-              ⬜ 未选择
-             </option>
 <option value="1">
               ✅ 完成
              </option>
@@ -14058,10 +14098,6 @@ else FutureRadar.init();
 </td>
 <td class="center">
 <select aria-label="待办事项9状态" class="status-select logistics-status">
-
-<option value="" selected>
-              ⬜ 未选择
-             </option>
 <option value="1">
               ✅ 完成
              </option>
@@ -14114,10 +14150,6 @@ else FutureRadar.init();
 </td>
 <td class="center">
 <select aria-label="待办事项10状态" class="status-select logistics-status">
-
-<option value="" selected>
-              ⬜ 未选择
-             </option>
 <option value="1">
               ✅ 完成
              </option>
@@ -14272,18 +14304,6 @@ else FutureRadar.init();
 </div>
 </div>
 <div class="card-content">
-<!-- 趋势分析 -->
-<div class="mb-6">
-<h3>
-         📈 趋势分析
-        </h3>
-<p class="text-muted mb-3">
-         查看效能指标的长期趋势变化和分析报告。
-        </p>
-<button class="btn btn-primary" onclick="if(window.trendChartEnhancer &amp;&amp; window.trendChartEnhancer.showChartUI){window.trendChartEnhancer.showChartUI()}else{alert('趋势分析功能正在初始化,请稍后重试')}">
-         📈 打开趋势分析
-        </button>
-</div>
 <!-- 时间序列趋势图 -->
 <div class="mb-6">
 <h3>
@@ -14304,6 +14324,25 @@ else FutureRadar.init();
 <button class="btn btn-secondary" onclick="window.TPI.updateTrendChart(90)">
            90天
           </button>
+<button class="btn btn-secondary" onclick="window.TPI.updateTrendChart(180)">
+           180天
+          </button>
+<button class="btn btn-secondary" onclick="window.TPI.updateTrendChart(365)">
+           1年
+          </button>
+<button class="btn btn-secondary" onclick="window.TPI.updateTrendChart(730)">
+           2年
+          </button>
+<button class="btn btn-secondary" onclick="window.TPI.updateTrendChart(1095)">
+           3年
+          </button>
+<button class="btn btn-secondary" onclick="window.TPI.updateTrendChart(1460)">
+           4年
+          </button>
+<button class="btn btn-secondary" onclick="window.TPI.updateTrendChart(1825)">
+           5年
+          </button>
+
 <button class="btn btn-primary" onclick="window.TPI.exportChart('trendChart', '趋势图')">
            📥 导出图表
           </button>
@@ -14378,8 +14417,14 @@ else FutureRadar.init();
 <button class="btn btn-secondary" onclick="window.TPI.restoreBackup()" style="flex: 1; min-width: 120px;">
             🔄 恢复备份
            </button>
+
+<button class="btn btn-danger" onclick="window.TPI.clearTodayCache()" style="flex: 1; min-width: 120px;">
+            🧹 清空今日
+           </button>
 </div>
-</div>
+<p class="text-muted" style="margin-top: 10px; font-size: 0.9em; line-height: 1.4;">
+          ⚠️ 说明：<strong>“清空今日”仅清除今日表单缓存</strong>（tpi_data_今日、tpi_temp_snapshot_今日 等），<strong>不包含</strong>【未来事件雷达】与【杂事记录】。
+         </p>
 </div><div class="data-processing-card">
 <h4>
           📋 复制前一天
@@ -14439,15 +14484,7 @@ else FutureRadar.init();
 </div>
 </div>
 </div>
-<!-- 数据保存与恢复 -->
-<div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;">
-<button class="btn btn-success" onclick="exportCurrentSnapshot('markdown')" style="flex: 1; min-width: 140px;">
-           💾 保存当前数据
-          </button>
-<button class="btn btn-info" onclick="loadTpiData()" style="flex: 1; min-width: 140px;">
-           📥 恢复保存的数据
-          </button>
-</div>
+
 <div style="padding: 10px; background: #fef3c7; border-left: 3px solid #f59e0b; border-radius: 6px; font-size: 13px; margin-top: 15px;">
 <strong>✅ 导出说明:</strong>
 <ul style="margin: 8px 0 0 0; padding-left: 20px; font-size: 12px;">
@@ -14457,64 +14494,52 @@ else FutureRadar.init();
 <li>建议定期导出备份，防止数据丢失</li>
 </ul>
 </div>
-</div></div></div><div class="data-workshop-bottom"><div class="data-processing-card" style="border: 2px solid #8b5cf6; background: linear-gradient(135deg, #f5f3ff 0%, #ffffff 100%);">
-<h4>
-         📈 数据统计
-        </h4>
-<div class="grid-3 mt-3">
-<div class="alert alert-info">
-<h5>
-           📅 记录天数
-          </h5>
-<p id="stats-days-count">
-           0 天
-          </p>
-</div>
-<div class="alert alert-success">
-<h5>
-           🏆 最高TPI
-          </h5>
-<p id="stats-max-tpi">
-           0 分
-          </p>
-</div>
-<div class="alert alert-warning">
-<h5>
-           📊 平均TPI
-          </h5>
-<p id="stats-avg-tpi">
-           0 分
-          </p>
-</div>
-</div>
-<div class="text-center mt-3">
-<button class="btn btn-secondary" onclick="window.TPI.updateStatistics()">
-          🔄 更新统计
-         </button>
-</div>
-</div><div class="data-processing-card">
-<h4>
-          🗃️ 归档旧数据
-         </h4>
-<p class="text-muted mb-3">
-          将超过指定天数的旧数据归档到单独文件，释放存储空间。
-         </p>
-<button class="btn btn-secondary" onclick="window.archiveOldDataComplete()">
-          🗃️ 归档旧数据
-         </button>
-</div><div class="data-processing-card">
-<h4>
-          🔧 数据维护
-         </h4>
-<p class="text-muted mb-3">
-          专业的数据维护和健康检查工具。
-         </p>
-<div style="display: flex; flex-direction: column; gap: 10px;">
-<button class="btn btn-secondary" onclick="window.checkDataHealthComplete()">
-           💊 数据健康检查
+</div></div></div><div class="data-workshop-bottom">
+  <div class="data-processing-card" style="border: 2px solid #8b5cf6; background: linear-gradient(135deg, #f5f3ff 0%, #ffffff 100%);">
+    <h4>📈 数据统计与维护</h4>
+
+    <div style="display:flex; flex-direction:column; gap:12px;">
+
+      <!-- 统计区 -->
+      <div>
+        <div class="tpi-stats-row" style="display:flex; gap:8px; margin-top:10px; flex-wrap:nowrap; overflow-x:auto;">
+          <div class="alert alert-info" style="padding:8px 10px; flex:1; min-width:160px;">
+            <h5 style="margin:0 0 6px 0;">📅 记录天数</h5>
+            <p id="stats-days-count" style="margin:0;">0 天</p>
+          </div>
+          <div class="alert alert-success" style="padding:8px 10px; flex:1; min-width:160px;">
+            <h5 style="margin:0 0 6px 0;">🏆 最高TPI</h5>
+            <p id="stats-max-tpi" style="margin:0;">0 分</p>
+          </div>
+          <div class="alert alert-warning" style="padding:8px 10px; flex:1; min-width:160px;">
+            <h5 style="margin:0 0 6px 0;">📊 平均TPI</h5>
+            <p id="stats-avg-tpi" style="margin:0;">0 分</p>
+          </div>
+        </div>
+        <div class="text-center" style="margin-top:10px;">
+          <button class="btn btn-secondary" onclick="window.TPI.updateStatistics()" style="padding:6px 12px; font-size:13px;">
+            🔄 更新统计
           </button>
+        </div>
+      </div>
+
+      <div style="height:1px; background: rgba(0,0,0,.08);"></div>
+
+      <!-- 维护区 -->
+      <div>
+        <div class="text-muted" style="font-size:12px; margin-bottom:8px;">
+          🔧 维护工具（仅影响本地数据维护/检查，不涉及杂事记录与未来事件雷达）
+        </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button class="btn btn-secondary" onclick="window.checkDataHealthComplete()" style="flex:1; min-width:180px;">
+            💊 数据健康检查
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
 </div>
-</div></div></div>
 <!-- 数据统计 -->
 </div>
 </section>
@@ -17332,16 +17357,18 @@ function calculateAMI() {
 
             bonusItems.forEach(item => {
                 switch(item.value) {
-                    case 'flow': totalBonus += 5; break;
-                    case 'balance': totalBonus += 5; break;
-                    case 'excellent': totalBonus += 5; break;
-                    case 'warrior': totalBonus += 7; break;
-                    case 'return': totalBonus += 7; break;
-                    case 'streak21': totalBonus += 7; break;
-                    case 'streak14': totalBonus += 5; break;
-                    case 'streak7': totalBonus += 3; break;
-                    case 'recovery': totalBonus += 3; break;
-                    case 'micro-victories': totalBonus += 1; break; // 新增微小胜利奖
+                    case 'flow': totalBonus += 3; break;  // 超级心流: 改为+3
+                    case 'balance': totalBonus += 3; break;  // 完美作息: 改为+3
+                    case 'excellent': totalBonus += 4; break;  // 卓越表现: 改为+4
+                    case 'warrior': totalBonus += 4; break;  // 攻坚勇士: 改为+4
+                    case 'return': totalBonus += 4; break;  // 状态回升: 改为+4
+                    case 'streak21': totalBonus += 5; break;  // 连续稳定21日: 保持+5
+                    case 'streak14': totalBonus += 3; break;  // 连续稳定14日: 改为+3
+                    case 'streak7': totalBonus += 2; break;  // 连续稳定7日: 改为+2
+                    case 'recovery': totalBonus += 2; break;  // 快速恢复: 改为+2
+                    case 'micro-victories': totalBonus += 1; break;  // 微小胜利
+                    case 'bonus_deep_review': totalBonus += 3; break;  // 高强度稳定日: +3
+                    case 'bonus_steady': totalBonus += 2; break;  // 抗干扰稳态: +2
                     default:
                         const val = safeParseFloat(item.value);
                         if(val>0) totalBonus += val;
@@ -21284,7 +21311,7 @@ const __exp = (function(){
 <script>
 /* =========================================================
    [Removed] GitHub Gist 云端同步模块
-   - 已切换为 GitHub Gist (GitHub Gist)
+   - 已切换为 TPI+ 后端 /register /login /save /load
    - 旧的 Gist 同步代码已禁用，避免任何对 GitHub 的访问
 ========================================================= */
 (function(){
@@ -22851,7 +22878,21 @@ window.addEventListener('resize', function() {
                 
                 if (validDataCount === 0) {
                     console.warn('[TrendChart] 没有有效数据');
-                    canvas.parentElement.innerHTML = '<div class="alert alert-info" style="padding: 20px; background: #dbeafe; border: 1px solid #3b82f6; border-radius: 8px; text-align: center;">📊 暂无历史数据<br><br>请先在"数据工坊"中填写今日数据，<br>之后即可查看趋势分析。</div>';
+                    (function(){
+                        const parent = canvas.parentElement;
+                        if (parent) {
+                            // ✅ 不要移除 canvas（否则切换“近7/14/30天”会找不到画布）
+                            canvas.style.display = 'none';
+                            let msg = parent.querySelector('.trendchart-empty-msg');
+                            if (!msg) {
+                                msg = document.createElement('div');
+                                msg.className = 'trendchart-empty-msg';
+                                msg.style.cssText = 'padding: 20px; background: #dbeafe; border: 1px solid #3b82f6; border-radius: 8px; text-align: center;';
+                                parent.appendChild(msg);
+                            }
+                            msg.innerHTML = '📊 暂无历史数据<br><br>请先在"数据工坊"中填写今日数据，<br>之后即可查看趋势分析。';
+                        }
+                    })();
                     return;
                 }
 
@@ -22945,7 +22986,20 @@ window.addEventListener('resize', function() {
                         console.log('[TrendChart] 图表绘制完成');
                     } else {
                         console.error('[TrendChart] Chart.js库未加载');
-                        canvas.parentElement.innerHTML = '<div class="alert alert-warning" style="padding: 20px; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px;">⚠️ Chart.js库未加载，无法显示图表。<br><br>请检查网络连接并刷新页面。</div>';
+                        (function(){
+                        const parent = canvas.parentElement;
+                        if (parent) {
+                            canvas.style.display = 'none';
+                            let msg = parent.querySelector('.trendchart-empty-msg');
+                            if (!msg) {
+                                msg = document.createElement('div');
+                                msg.className = 'trendchart-empty-msg';
+                                msg.style.cssText = 'padding: 20px; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; text-align: center;';
+                                parent.appendChild(msg);
+                            }
+                            msg.innerHTML = '⚠️ Chart.js库未加载，无法显示图表。<br><br>请检查网络连接并刷新页面。';
+                        }
+                    })();
                     }
                 } catch (chartError) {
                     console.error('[TrendChart] Chart.js绘制失败:', chartError);
@@ -23022,11 +23076,29 @@ window.addEventListener('resize', function() {
                 }
                 
                 // 检查canvas是否存在
-                const canvas = document.getElementById('trendChartModal');
+                let canvas = document.getElementById('trendChartModal');
+                if (!canvas) {
+                    // ✅ 兼容：initChart 在“无数据/错误”时可能隐藏或替换了容器内容
+                    const container = document.querySelector('.modal-overlay .chart-container') || document.querySelector('.chart-container');
+                    if (container) {
+                        // 清理旧提示
+                        try { container.querySelectorAll('.trendchart-empty-msg,.loading-overlay').forEach(el => el.remove()); } catch(e) {}
+                        container.innerHTML = '<canvas id="trendChartModal" style="max-height: 400px; width: 100%;"></canvas>';
+                        canvas = document.getElementById('trendChartModal');
+                    }
+                }
                 if (!canvas) {
                     console.warn('[TrendChart] Canvas不存在，无法更新图表');
                     return;
                 }
+                // 若之前被隐藏（无数据/错误提示），这里恢复显示并移除提示
+                try {
+                    canvas.style.display = '';
+                    if (canvas.parentElement) {
+                        const msg = canvas.parentElement.querySelector('.trendchart-empty-msg');
+                        if (msg) msg.remove();
+                    }
+                } catch(e) {}
                 
                 // 显示加载提示
                 if (canvas.parentElement) {
@@ -24157,88 +24229,256 @@ window.addEventListener('resize', function() {
 
 })();
   </script>
-
-<!-- [REMOVED] script block 27 had a syntax error that prevented page from loading -->
-
 <script>
    // ═══════════════════════════════════════════════════════════════════
-// 全局函数定义 - 确保在全局作用域可用
+// 补充缺失的Complete函数
 // ═══════════════════════════════════════════════════════════════════
 
-// 复制前一天数据
-window.copyPreviousDayDataComplete = function() {
-    console.log('📋 [copyPreviousDayDataComplete] 函数被调用');
-    try {
-        const currentDateInput = document.getElementById('date-input');
-        if (!currentDateInput || !currentDateInput.value) {
-            alert('⚠️ 请先选择当前日期\n\n在页面顶部的日期选择器中选择日期');
-            console.log('⚠️ [copyPreviousDayDataComplete] 未选择日期');
-            return;
-        }
+(function() {
+    'use strict';
 
-        const currentDate = new Date(currentDateInput.value);
-        const previousDate = new Date(currentDate);
-        previousDate.setDate(previousDate.getDate() - 1);
-        const prevDateStr = previousDate.toISOString().split('T')[0];
+    // 1. 从云端加载函数 - 已在前面定义(第2549行),此处删除重复定义
 
-        console.log('📋 [copyPreviousDayDataComplete] 尝试复制:', prevDateStr, '→', currentDateInput.value);
-
-        // 获取前一天的数据
-        const prevDataStr = __tpi_ls_get('tpi_data_' + prevDateStr);
-
-        if (!prevDataStr) {
-            alert('⚠️ 未找到前一天的数据\n\n前一天日期: ' + prevDateStr + '\n\n请确保前一天有数据记录');
-            console.log('⚠️ [copyPreviousDayDataComplete] 未找到数据:', prevDateStr);
-            return;
-        }
-
-        // 确认对话框
-        const confirmMsg = `📋 复制前一天数据\n\n` +
-            `从日期: ${prevDateStr}\n` +
-            `到日期: ${currentDateInput.value}\n\n` +
-            `⚠️ 这将覆盖当前日期的所有数据！\n\n` +
-            `确认要继续吗？`;
-
-        if (!confirm(confirmMsg)) {
-            console.log('❌ [copyPreviousDayDataComplete] 用户取消操作');
-            return;
-        }
-
+    // 2. 仅存本地函数
+    window.saveLocalOnlyComplete = function() {
+        console.log('💾 [saveLocalOnlyComplete] 仅存本地功能被调用');
+        console.log('💾 [saveLocalOnlyComplete] 执行时间:', new Date().toLocaleString());
+        
         try {
-            // 解析数据以验证格式
-            const prevData = JSON.parse(prevDataStr);
+            // 获取当前日期
+            const dateInput = document.getElementById('date-input');
+            const dateStr = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
+            console.log('📅 [saveLocalOnlyComplete] 当前日期:', dateStr);
 
-            // 保存到当前日期
-            __tpi_ls_set('tpi_data_' + currentDateInput.value, prevDataStr);
+            // 尝试收集表单数据
+            let formData = null;
 
-            console.log('✅ [copyPreviousDayDataComplete] 复制成功');
+            // 方法1: 使用window.collectFormData
+            if (window.collectFormData && typeof window.collectFormData === 'function') {
+                console.log('🔧 [saveLocalOnlyComplete] 使用window.collectFormData收集数据');
+                formData = window.collectFormData();
+            }
+
+            // 方法2: 使用TPI.saveData
+            if (!formData && window.TPI && typeof window.TPI.saveData === 'function') {
+                console.log('🔧 [saveLocalOnlyComplete] 使用TPI.saveData保存');
+                try {
+                    window.TPI.saveData();
+                    console.log('✅ [saveLocalOnlyComplete] TPI.saveData调用成功');
+                    alert('✅ 数据已保存到本地！\n\n日期: ' + dateStr + '\n注意: 仅保存在本地浏览器，未同步到云端');
+                    return;
+                } catch (saveError) {
+                    console.error('❌ [saveLocalOnlyComplete] TPI.saveData失败:', saveError);
+                    // 继续尝试方法3
+                }
+            }
+
+            // 方法3: 手动收集表单数据
+            if (!formData) {
+                console.log('🔧 [saveLocalOnlyComplete] 使用手动方式收集表单数据');
+                formData = {};
+                // 收集所有输入框的值
+                const inputs = document.querySelectorAll('input[type="number"], input[type="text"], textarea, select');
+                console.log('📊 [saveLocalOnlyComplete] 找到', inputs.length, '个输入元素');
+                
+                inputs.forEach(input => {
+                    if (input.id) {
+                        if (input.type === 'checkbox') {
+                            formData[input.id] = input.checked;
+                        } else {
+                            formData[input.id] = input.value;
+                        }
+                    }
+                });
+                
+                console.log('📊 [saveLocalOnlyComplete] 收集到的数据字段数:', Object.keys(formData).length);
+            }
+
+            // 保存到本地存储
+            const key = 'tpi_data_' + dateStr;
+            const dataStr = JSON.stringify(formData);
+            console.log('💾 [saveLocalOnlyComplete] 准备保存，key:', key);
+            console.log('💾 [saveLocalOnlyComplete] 数据大小:', Math.round(dataStr.length / 1024), 'KB');
+            
+            __tpi_ls_set(key, dataStr);
+            console.log('✅ [saveLocalOnlyComplete] 数据已保存到localStorage');
 
             // 显示成功消息
-            const successMsg = `✅ 复制成功！\n\n` +
-                `已将 ${prevDateStr} 的数据复制到 ${currentDateInput.value}\n\n` +
-                `数据包括:\n` +
-                `• TPI分数: ${prevData.tpi || 0}\n` +
-                `• 学习时长: ${prevData.studyHours || 0}小时\n` +
-                `• 习惯完成情况\n` +
-                `• 其他记录\n\n` +
-                `点击"确定"后将刷新页面以显示新数据`;
+            alert('✅ 数据已保存到本地！\n\n日期: ' + dateStr + '\nkey: ' + key + '\n注意: 仅保存在本地浏览器，未同步到云端');
 
-            alert(successMsg);
-
-            // 刷新页面以显示新数据
-            location.reload();
-
-        } catch (parseError) {
-            console.error('❌ [copyPreviousDayDataComplete] 数据解析失败:', parseError);
-            alert('❌ 数据格式错误\n\n前一天的数据可能已损坏\n请尝试手动输入数据');
+        } catch (error) {
+            console.error('❌ [saveLocalOnlyComplete] 保存本地失败:', error);
+            console.error('❌ [saveLocalOnlyComplete] 错误名称:', error.name);
+            console.error('❌ [saveLocalOnlyComplete] 错误消息:', error.message);
+            console.error('❌ [saveLocalOnlyComplete] 错误堆栈:', error.stack);
+            
+            // 检查是否是存储配额错误
+            if (error.name === 'QuotaExceededError') {
+                alert('❌ 存储空间不足\n\n本地存储空间已满，请：\n1. 导出现有数据进行备份\n2. 清理旧数据\n3. 然后重试');
+            } else {
+                alert('❌ 保存失败\n\n错误: ' + error.message + '\n\n请查看控制台获取详细信息');
+            }
         }
+    };
 
-    } catch (error) {
-        console.error('❌ [copyPreviousDayDataComplete] 复制失败:', error);
-        alert('❌ 复制失败\n\n错误信息: ' + error.message + '\n\n请重试或联系技术支持');
-    }
-};
+    // undoActionComplete 函数已在早期初始化脚本中定义（第4228行），此处不再重复定义
 
+    // redoActionComplete 函数已在早期初始化脚本中定义（第4260行），此处不再重复定义
+
+    // 5. 归档旧数据函数
+    window.archiveOldDataComplete = function() {
+        try {
+            // 询问用户要归档多少天前的数据
+            const daysInput = prompt('🗃️ 归档旧数据\n\n请输入要归档多少天前的数据（例如: 90）\n\n归档的数据将被压缩存储，减少存储空间占用', '90');
+
+            if (!daysInput) {
+                return; // 用户取消
+            }
+
+            const days = parseInt(daysInput);
+            if (isNaN(days) || days < 1) {
+                alert('❌ 请输入有效的天数（大于0的整数）');
+                return;
+            }
+
+            // 确认操作
+            if (!confirm(`⚠️ 确认要归档 ${days} 天前的数据吗？\n\n归档后的数据将被压缩，但仍可查看和恢复。`)) {
+                return;
+            }
+
+            // 计算归档日期
+            const archiveDate = new Date();
+            archiveDate.setDate(archiveDate.getDate() - days);
+            const archiveDateStr = archiveDate.toISOString().split('T')[0];
+
+            // 遍历localStorage，找到旧数据
+            let archivedCount = 0;
+            const keysToArchive = [];
+
+            for (let i = 0; i < __tpi_ls_length(); i++) {
+                const key = __tpi_ls_key(i);
+                if (key && key.startsWith('tpi_data_')) {
+                    const dateStr = key.replace('tpi_data_', '');
+                    if (dateStr < archiveDateStr) {
+                        keysToArchive.push(key);
+                    }
+                }
+            }
+
+            if (keysToArchive.length === 0) {
+                alert('ℹ️ 没有找到需要归档的数据\n\n所有数据都在 ' + days + ' 天之内');
+                return;
+            }
+
+            // 创建归档
+            const archiveData = {};
+            keysToArchive.forEach(key => {
+                const data = __tpi_ls_get(key);
+                if (data) {
+                    archiveData[key] = JSON.parse(data);
+                    archivedCount++;
+                }
+            });
+
+            // 保存归档
+            const archiveKey = 'tpi_archive_' + new Date().toISOString().split('T')[0];
+            __tpi_ls_set(archiveKey, JSON.stringify(archiveData));
+
+            // 询问是否删除原数据
+            if (confirm(`✅ 已归档 ${archivedCount} 条记录
+
+是否要删除原始数据以节省空间？
+
+（归档数据已保存，可随时恢复）`)) {
+                keysToArchive.forEach(key => {
+                    __tpi_ls_remove(key);
+                });
+                alert(`✅ 归档完成！
+
+已归档: ${archivedCount} 条
+已删除原始数据
+归档位置: ${archiveKey}`);
+            } else {
+                alert(`✅ 归档完成！
+
+已归档: ${archivedCount} 条
+保留原始数据
+归档位置: ${archiveKey}`);
+            }
+
+        } catch (error) {
+            console.error('归档失败:', error);
+            alert('❌ 归档失败: ' + error.message);
+        }
+    };
+
+    // 6. 其他辅助函数
+    window.checkDataHealthComplete = function() {
+        try {
+            let totalKeys = 0;
+            let tpiDataKeys = 0;
+            let totalSize = 0;
+            const issues = [];
+
+            // 检查所有localStorage数据
+            for (let i = 0; i < __tpi_ls_length(); i++) {
+                const key = __tpi_ls_key(i);
+                if (key) {
+                    totalKeys++;
+                    const value = __tpi_ls_get(key);
+                    if (value) {
+                        totalSize += value.length;
+
+                        if (key.startsWith('tpi_data_')) {
+                            tpiDataKeys++;
+
+                            // 检查数据完整性
+                            try {
+                                const data = JSON.parse(value);
+                                if (!data.date) {
+                                    issues.push(`${key}: 缺少日期字段`);
+                                }
+                            } catch (e) {
+                                issues.push(`${key}: 数据格式错误`);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 计算存储空间使用率
+            const maxSize = 5 * 1024 * 1024; // 5MB (估计值)
+            const usagePercent = ((totalSize / maxSize) * 100).toFixed(2);
+
+            // 生成报告
+            let report = '💊 数据健康检查报告\n\n';
+            report += `📊 存储统计:\n`;
+            report += `• 总键数: ${totalKeys}\n`;
+            report += `• TPI数据条数: ${tpiDataKeys}\n`;
+            report += `• 存储空间: ${(totalSize / 1024).toFixed(2)} KB\n`;
+            report += `• 使用率: ${usagePercent}%\n\n`;
+
+            if (issues.length > 0) {
+                report += `⚠️ 发现 ${issues.length} 个问题:\n`;
+                issues.slice(0, 5).forEach(issue => {
+                    report += `• ${issue}\n`;
+                });
+                if (issues.length > 5) {
+                    report += `• ... 还有 ${issues.length - 5} 个问题\n`;
+                }
+            } else {
+                report += `✅ 所有数据完整性良好`;
+            }
+
+            alert(report);
+
+        } catch (error) {
+            console.error('健康检查失败:', error);
+            alert('❌ 健康检查失败: ' + error.message);
+        }
+    };
+
+    window.openBackupManagerComplete = function(){ try{ alert('ℹ️ 备份管理器（备份历史列表/恢复/删除）已移除'); }catch(e){} };
 // 归档旧数据
 window.archiveOldDataComplete = function() {
     console.log('🗃️ [archiveOldDataComplete] 函数被调用');
@@ -24882,358 +25122,7 @@ html += `</head><body>
         // 问题 12: 打开备份管理
         // ═══════════════════════════════════════════════════════════════════
         if (!window.openBackupManagerComplete) {
-            window.openBackupManagerComplete = function() {
-                try {
-                    let backupInfo = '💾 备份管理\n\n';
-
-                    // 统计备份数据
-                    let backupCount = 0;
-                    for (let i = 0; i < __tpi_ls_length(); i++) {
-                        const key = __tpi_ls_key(i);
-                        if (key && key.startsWith('tpi_backup_')) {
-                            backupCount++;
-                        }
-                    }
-
-                    backupInfo += `当前备份数: ${backupCount}\n\n`;
-                    backupInfo += '可用操作:\n';
-                    backupInfo += '1. 创建新备份\n';
-                    backupInfo += '2. 恢复备份\n';
-                    backupInfo += '3. 清理旧备份\n\n';
-
-                    const action = prompt(backupInfo + '请输入操作编号 (1-3):', '1');
-
-                    if (action === '1') {
-                        // 创建备份
-                        const backupName = prompt('请输入备份名称:', `backup_${new Date().toISOString().split('T')[0]}`);
-                        if (backupName) {
-                            const allData = {};
-                            for (let i = 0; i < __tpi_ls_length(); i++) {
-                                const key = __tpi_ls_key(i);
-                                if (key && key.startsWith('tpi_data_')) {
-                                    allData[key] = __tpi_ls_get(key);
-                                }
-                            }
-                            __tpi_ls_set(`tpi_backup_${backupName}`, JSON.stringify(allData));
-                            alert(`✅ 备份创建成功: ${backupName}`);
-                        }
-                    } else if (action === '2') {
-                        // 显示可恢复的备份列表
-                        const backups = [];
-                        for (let i = 0; i < __tpi_ls_length(); i++) {
-                            const key = __tpi_ls_key(i);
-                            if (key && key.startsWith('tpi_backup_')) {
-                                backups.push(key.replace('tpi_backup_', ''));
-                            }
-                        }
-
-                        if (backups.length === 0) {
-                            alert('⚠️ 没有可用的备份');
-                        } else {
-                            const backupList = backups.map((b, i) => `${i + 1}. ${b}`).join('\n');
-                            const selection = prompt(`选择要恢复的备份:
-
-${backupList}
-
-请输入编号:`, '1');
-
-                            if (selection && !isNaN(selection)) {
-                                const idx = parseInt(selection) - 1;
-                                if (idx >= 0 && idx < backups.length) {
-                                    const backupKey = `tpi_backup_${backups[idx]}`;
-                                    const backupData = JSON.parse(__tpi_ls_get(backupKey));
-
-                                    if (confirm(`确认恢复备份 "${backups[idx]}"?\n\n当前数据将被覆盖！`)) {
-                                        Object.keys(backupData).forEach(key => {
-                                            __tpi_ls_set(key, backupData[key]);
-                                        });
-                                        alert('✅ 备份恢复成功！\n\n请刷新页面查看');
-                                        location.reload();
-                                    }
-                                }
-                            }
-                        }
-                    } else if (action === '3') {
-                        // 清理备份
-                        if (confirm('⚠️ 确认清理所有备份？\n\n此操作不可恢复！')) {
-                            let cleaned = 0;
-                            for (let i = __tpi_ls_length() - 1; i >= 0; i--) {
-                                const key = __tpi_ls_key(i);
-                                if (key && key.startsWith('tpi_backup_')) {
-                                    __tpi_ls_remove(key);
-                                    cleaned++;
-                                }
-                            }
-                            alert(`✅ 已清理 ${cleaned} 个备份`);
-                        }
-                    }
-                } catch (error) {
-                    console.error('备份管理失败:', error);
-                    alert('❌ 操作失败: ' + error.message);
-                }
-            };
-        }
-
-        // ═══════════════════════════════════════════════════════════════════
-        // 问题 13: 切换暗黑模式和恢复暗黑模式
-        // ═══════════════════════════════════════════════════════════════════
-        if (!window.toggleDarkThemeComplete) {
-            window.toggleDarkThemeComplete = function() {
-                try {
-                    const isDark = document.body.classList.toggle('dark-theme');
-                    __tpi_ls_set('tpi_theme', isDark ? 'dark' : 'light');
-
-                    if (isDark) {
-                        alert('🌙 已切换到暗黑模式');
-                    } else {
-                        alert('☀️ 已切换到明亮模式');
-                    }
-                } catch (error) {
-                    console.error('切换主题失败:', error);
-                    alert('❌ 切换失败: ' + error.message);
-                }
-            };
-        }
-
-        if (!window.restoreDarkThemeComplete) {
-            window.restoreDarkThemeComplete = function() {
-                try {
-                    const savedTheme = __tpi_ls_get('tpi_theme');
-                    if (savedTheme === 'dark') {
-                        document.body.classList.add('dark-theme');
-                    } else {
-                        document.body.classList.remove('dark-theme');
-                    }
-                } catch (error) {
-                    console.error('恢复主题失败:', error);
-                }
-            };
-        }
-
-        // 页面加载时自动恢复主题
-        const savedTheme = __tpi_ls_get('tpi_theme');
-        if (savedTheme === 'dark') {
-            document.body.classList.add('dark-theme');
-        }
-
-        // ═══════════════════════════════════════════════════════════════════
-        // 问题 14: 操作历史、撤销/重做、验证规则
-        // ═══════════════════════════════════════════════════════════════════
-        // ═══════════════════════════════════════════════════════════════════
-        // 问题 15: 模板内容上传 - 预览变更、从文件同步、从文本同步
-        // ═══════════════════════════════════════════════════════════════════
-        if (!window.TemplateSyncManager) {
-            window.TemplateSyncManager = {
-                previewChanges: function() {
-                    alert('📋 预览变更\n\n此功能用于预览模板同步前后的差异\n\n请先上传模板文件或输入模板文本');
-                },
-                syncFromFile: function() {
-                    const input = document.createElement('input');
-                    input.type = 'file';
-                    input.accept = '.txt,.json,.md';
-                    input.onchange = function(e) {
-                        const file = e.target.files[0];
-                        if (file) {
-                            const reader = new FileReader();
-                            reader.onload = function(event) {
-                                alert('✅ 模板文件已读取\n\n文件名: ' + file.name + '\n\n可以进行同步操作');
-                            };
-                            reader.readAsText(file);
-                        }
-                    };
-                    input.click();
-                },
-                syncFromText: function() {
-                    const text = prompt('📝 请输入模板文本内容:', '');
-                    if (text) {
-                        alert('✅ 模板文本已保存\n\n可以进行同步操作');
-                    }
-                },
-                clearHistory: function() {
-                    if (confirm('⚠️ 确认要清除所有同步历史吗？\n\n此操作不可恢复。')) {
-                        __tpi_ls_remove('tpi_template_sync_history');
-                        alert('✅ 同步历史已清除');
-                    }
-                },
-                exportHistory: function() {
-                    try {
-                        const history = __tpi_ls_get('tpi_template_sync_history');
-                        if (!history) {
-                            alert('ℹ️ 暂无同步历史记录');
-                            return;
-                        }
-
-                        const blob = new Blob([history], { type: 'application/json' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = `template_sync_history_${new Date().toISOString().split('T')[0]}.json`;
-                        a.click();
-                        URL.revokeObjectURL(url);
-
-                        alert('✅ 同步历史已导出');
-                    } catch (error) {
-                        console.error('导出失败:', error);
-                        alert('❌ 导出失败: ' + error.message);
-                    }
-                },
-                refreshStats: function() {
-                    alert('📊 刷新统计\n\n模板同步统计信息已更新');
-                },
-                exportStats: function() {
-                    alert('📊 导出统计\n\n统计报告已准备导出');
-                }
-            };
-        }
-
-        // ═══════════════════════════════════════════════════════════════════
-        // 问题 16: 刷新统计
-        // ═══════════════════════════════════════════════════════════════════
-
-        // ═══════════════════════════════════════════════════════════════════
-        // 额外修复: 确保所有按钮事件都能正常触发
-        // ═══════════════════════════════════════════════════════════════════
-
-        // 添加全局错误处理，避免单个功能错误影响整体
-        window.addEventListener('error', function(e) {
-            console.error('全局错误捕获:', e.message);
-            // 不阻止默认行为，只记录日志
-        });
-
-        // 注意：不再添加备用事件监听器，因为所有必要的函数都已在页面加载时定义
-        // exportDataComplete、importDataComplete等函数都已在页面其他部分定义
-
-        // 最终验证：检查所有关键函数是否存在
-        const criticalFunctions = [
-            'exportDataComplete',
-            'importDataComplete',
-            'copyPreviousDayDataComplete',
-            'archiveOldDataComplete',
-            'checkDataHealthComplete'
-        ];
-
-        criticalFunctions.forEach(funcName => {
-            if (typeof window[funcName] === 'function') {
-            } else {
-                console.error(`  ❌ ${funcName} - 不可用`);
-            }
-        });
-
-    }
-
-})();
-  </script>
-<!-- ==================== 自动保存管理器 ==================== -->
-<script>
-   /**
- * 自动保存管理器
- * 功能：监听输入变化，自动保存数据到localStorage
- * 特点：完全独立运行，不干扰现有功能
- */
-window.AutoSaveManager = {
-    saveTimer: null,
-    lastSaveTime: 0,
-    DEBOUNCE_DELAY: 3000, // 3秒防抖
-
-    /**
-     * 初始化自动保存管理器
-     */
-    init: function() {
-
-        // 使用事件委托监听所有输入变化
-        document.addEventListener('change', (e) => {
-            if (e.target.matches('input, select, textarea')) {
-                this.scheduleSave();
-            }
-        }, true);
-
-        // 也监听input事件（实时输入）
-        document.addEventListener('input', (e) => {
-            if (e.target.matches('input[type="number"], input[type="time"], input[type="text"], textarea')) {
-                this.scheduleSave();
-            }
-        }, true);
-
-    },
-
-    /**
-     * 安排保存任务（带防抖）
-     */
-    scheduleSave: function() {
-        // 清除之前的定时器
-        if (this.saveTimer) {
-            clearTimeout(this.saveTimer);
-        }
-
-        // 设置新的定时器
-        this.saveTimer = setTimeout(() => {
-            this.performSave();
-        }, this.DEBOUNCE_DELAY);
-    },
-
-    /**
-     * 执行保存操作
-     */
-    performSave: function() {
-        try {
-            const now = Date.now();
-
-            // 避免频繁保存（最小间隔1秒）
-            if (now - this.lastSaveTime < 1000) {
-                return;
-            }
-
-            // 尝试调用现有的保存函数
-            let saved = false;
-
-            // 方案1: 尝试调用TPI.saveData
-            if (typeof window.TPI !== 'undefined' && typeof window.TPI.saveData === 'function') {
-                try {
-                    window.TPI.saveData();
-                    saved = true;
-                } catch (error) {
-                    console.warn('TPI.saveData调用失败:', error);
-                }
-            }
-
-            // 方案2: 如果有saveToLocalStorage函数
-            if (!saved && typeof window.saveToLocalStorage === 'function') {
-                try {
-                    window.saveToLocalStorage();
-                    saved = true;
-                } catch (error) {
-                    console.warn('saveToLocalStorage调用失败:', error);
-                }
-            }
-
-            // 如果成功保存，显示提示
-            if (saved) {
-                this.lastSaveTime = now;
-
-                // 使用SuccessNotifier显示保存提示
-                if (typeof window.SuccessNotifier !== 'undefined' &&
-                    typeof window.SuccessNotifier.show === 'function') {
-                    window.SuccessNotifier.show('💾 已自动保存', 2000);
-                } else {
-                }
-            }
-
-        } catch (error) {
-            console.error('自动保存失败:', error);
-        }
-    },
-
-    /**
-     * 手动触发保存（供其他模块调用）
-     */
-    triggerSave: function() {
-        if (this.saveTimer) {
-            clearTimeout(this.saveTimer);
-        }
-        this.performSave();
-    }
-};
-
+            window.openBackupManagerComplete = function(){ try{ alert('ℹ️ 备份管理器（备份历史列表/恢复/删除）已移除'); }catch(e){} };
 // 页面加载完成后初始化
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
@@ -25739,34 +25628,7 @@ window.TPIAdvanced = {
                     <div><strong>数据天数：</strong><span id="data-days">计算中...</span></div>
                 </div>
             </div>
-            
-            <div style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 16px;">
-                <h4 style="margin: 0 0 12px 0; color: #0c4a6e;">📈 趋势分析</h4>
-                <p style="margin: 0 0 16px 0; color: #374151;">查看效能指标的长期趋势变化和详细分析报告。</p>
-                
-                <!-- 趋势图表容器 -->
-                <div style="background: white; border-radius: 8px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                    <div class="chart-container" style="height: 300px; position: relative;">
-                        <canvas id="comparisonTrendChart"></canvas>
-                    </div>
-                </div>
-                
-                <!-- 时间范围选择按钮 -->
-                <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 16px;">
-                    <button class="btn btn-sm btn-secondary" onclick="updateComparisonTrendChart(7)" style="padding: 6px 12px; font-size: 13px;">近7天</button>
-                    <button class="btn btn-sm btn-secondary" onclick="updateComparisonTrendChart(14)" style="padding: 6px 12px; font-size: 13px;">近14天</button>
-                    <button class="btn btn-sm btn-primary" onclick="updateComparisonTrendChart(30)" style="padding: 6px 12px; font-size: 13px;">近30天</button>
-                    <button class="btn btn-sm btn-secondary" onclick="updateComparisonTrendChart(90)" style="padding: 6px 12px; font-size: 13px;">近90天</button>
-                </div>
-                
-                <!-- 趋势分析说明 -->
-                <div style="background: #f9fafb; border-radius: 6px; padding: 12px; font-size: 13px; color: #6b7280;">
-                    <div style="margin-bottom: 8px;"><strong style="color: #3b82f6;">■</strong> 蓝线：TPI总分趋势</div>
-                    <div style="margin-bottom: 8px;"><strong style="color: #10b981;">- -</strong> 绿色虚线：7日移动平均线</div>
-                    <div><strong style="color: #ef4444;">- -</strong> 红色虚线：目标线 (90分)</div>
-                </div>
-            </div>
-        `;
+            `;
         
         // ✅ 【第5批次修复】从localStorage实时计算真实统计数据
         setTimeout(() => {
@@ -27148,15 +27010,14 @@ window.addEventListener('unhandledrejection', function(event) {
 });
 
 console.log('✅ 全局错误监控已启动');
+})();
 console.log('');
 
-
-})();
 </script>
 <script>
 /* =========================================================
    [Removed] GitHub Repo 同步/合并脚本（tpi_db.json 等）
-   - 已切换为 GitHub Gist同步
+   - 已切换为 TPI+ 后端同步
 ========================================================= */
 (function(){
   // 兼容旧入口：如果其他脚本仍调用，不报错
@@ -27925,6 +27786,65 @@ try{
       setTimeout(()=>{ window.__tpi_backup_lock = false; }, 600);
     }
   };
+
+  // ✅ 新增：清空“今日表单缓存”（不包含未来事件雷达/杂事记录）
+  // 作用：删除本地今日快照/草稿，让页面刷新后回到“干净的今日”状态
+  window.TPI.clearTodayCache = function(){
+    try{
+      // 以 date-input 为准；若为空则回退到本地日期
+      let dateKey = '';
+      try{
+        const di = document.getElementById('date-input');
+        if (di && di.value) dateKey = di.value;
+      }catch(e){}
+      if (!dateKey) {
+        try{ dateKey = (typeof __tpi_getSelectedDate === 'function') ? __tpi_getSelectedDate() : ''; }catch(e){}
+      }
+      if (!dateKey) {
+        const d = new Date();
+        dateKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      }
+
+      const msg =
+        `确认要清空【${dateKey}】的“今日表单缓存”吗？\n\n` +
+        `将删除（如存在）：\n` +
+        `- tpi_data_${dateKey}\n` +
+        `- tpi_temp_snapshot_${dateKey}\n` +
+        `- tpi_data_v14_final__v14_final_${dateKey}\n\n` +
+        `⚠️ 不会删除：未来事件雷达、杂事记录、以及任何云端数据。\n` +
+        `清空后页面会自动刷新，打开将是“干净的今日”。`;
+
+      if (!confirm(msg)) return;
+
+      // 只清除“按日表单缓存/临时快照”，不触碰 futureRadar / misc
+      __tpi_ls_remove(`tpi_data_${dateKey}`);
+      __tpi_ls_remove(`tpi_temp_snapshot_${dateKey}`);
+      __tpi_ls_remove(`tpi_data_v14_final__v14_final_${dateKey}`);
+
+      // 避免“强制复苏”标记导致自动回填
+      __tpi_ls_remove('force_recovery_mode');
+      __tpi_ls_remove('force_recovery_reason');
+      __tpi_ls_remove('force_recovery_date');
+
+      try{ if (typeof window.updateStorageIndicator === 'function') window.updateStorageIndicator(); }catch(e){}
+
+      try{
+        if (window.tpiToast) window.tpiToast(`🧹 已清空 ${dateKey} 的今日表单缓存（不含未来事件雷达/杂事记录），页面即将刷新`, 'success');
+        else if (window.showNotification) window.showNotification(`🧹 已清空 ${dateKey} 的今日表单缓存（不含未来事件雷达/杂事记录），页面即将刷新`, 'success');
+        else alert(`已清空 ${dateKey} 的今日表单缓存（不含未来事件雷达/杂事记录），页面即将刷新`);
+      }catch(e){}
+
+      setTimeout(()=>{ try{ location.reload(); }catch(e){} }, 600);
+    }catch(e){
+      console.error('⛔ clearTodayCache failed:', e);
+      try{
+        if (window.tpiToast) window.tpiToast('❌ 清空失败：' + (e && e.message ? e.message : e), 'error');
+        else alert('清空失败：' + (e && e.message ? e.message : e));
+      }catch(_){}
+    }
+  };
+
+
 
   // 3) Fix "时间序列趋势图" buttons (7/30/90) — implement real Chart.js rendering instead of stub
   let __tpiTrendChartInstance = null;
@@ -28745,8 +28665,6 @@ try{
       if (!dateInput) return;
 
       dateInput.addEventListener('change', function() {
-        /* 日期切换：必须清空表单（模拟新一天开始，不自动加载历史） */
-        try{ if (typeof window.__tpi_resetForNewDay === 'function') window.__tpi_resetForNewDay(dateInput.value); }catch(e){}
         updateWeekdayDisplay();
       });
     } catch (e) {
@@ -28810,9 +28728,6 @@ try{
     const dd = String(d.getDate()).padStart(2,'0');
     return `${yyyy}-${mm}-${dd}`;
   }
-
-  // ✅ 让其他模块/按钮（如云端下载按钮的 onclick）可调用
-  try{ window.getSelectedDate = getSelectedDate; }catch(_e){}
 
   function keyForDate(dateStr){ return LS_PREFIX + dateStr; }
 
@@ -29425,7 +29340,7 @@ try{
         const FR = window.FutureRadar;
 
         // ---------- 1. 重写 renderSection：无视折叠状态，强制填充内容 ----------
-        const originalSection = FR.renderSection;
+        const originalRenderSection = FR.renderSection;
         FR.renderSection = function(key) {
             try {
                 const listContainer = document.getElementById(`list-${key}`);
@@ -29527,7 +29442,7 @@ try{
             try {
                 if (typeof this.loadData === 'function') this.loadData();
                 let attempts = 0;
-                const tryReload = () => {
+                const tryRender = () => {
                     attempts++;
                     const requiredIds = ['list-tempLife', 'list-tempAcademic', 'list-regularLife', 'list-regularAcademic'];
                     const allExist = requiredIds.every(id => document.getElementById(id));
@@ -29538,10 +29453,10 @@ try{
                         }
                         console.log('[雷达修复] reload 渲染完成，尝试次数:', attempts);
                     } else {
-                        setTimeout(tryReload, 100);
+                        setTimeout(tryRender, 100);
                     }
                 };
-                tryReload();
+                tryRender();
             } catch (e) {
                 console.error('[雷达修复] reload 失败:', e);
                 // 兜底：强行逐个渲染
@@ -29583,6 +29498,9 @@ try{
 <!-- ========== 修复补丁结束 ========== -->
 
 
+
+<script>
+/* =========================================================
 <script>
 // 使用固定 Gist ID: cab132a91b77c44ff7a66286a54c213d
 // 所有数据存储于 https://gist.github.com/xiaoyi1986811/cab132a91b77c44ff7a66286a54c213d
@@ -30334,6 +30252,299 @@ try{ updateAuthPanels(); }catch(e){}
 
 })();
 </script>
+</script>
+
+</body>
+</html>
+
+<script>
+/* ========================================
+   TPI 优化系统 - Toast 通知系统 v1.0
+======================================== */
+(function() {
+  function createToastContainer() {
+    if (document.getElementById('tpi-toast-container')) return;
+    
+    const container = document.createElement('div');
+    container.id = 'tpi-toast-container';
+    container.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      pointer-events: none;
+    `;
+    document.body.appendChild(container);
+  }
+  
+  window.TPIToast = {
+    show: function(message, type, duration) {
+      type = type || 'info';
+      duration = duration === undefined ? 3000 : duration;
+      
+      createToastContainer();
+      
+      const toast = document.createElement('div');
+      toast.style.cssText = `
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
+        padding: 16px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 300px;
+        max-width: 500px;
+        transform: translateX(calc(100% + 40px));
+        transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+        pointer-events: auto;
+        border-left: 4px solid ${this.getColor(type)};
+      `;
+      
+      const icon = document.createElement('span');
+      icon.style.cssText = 'font-size: 24px; line-height: 1; flex-shrink: 0;';
+      icon.textContent = this.getIcon(type);
+      
+      const msg = document.createElement('span');
+      msg.style.cssText = 'flex: 1; font-size: 14px; color: #1F2937;';
+      msg.textContent = message;
+      
+      const close = document.createElement('button');
+      close.textContent = '×';
+      close.style.cssText = `
+        background: none;
+        border: none;
+        font-size: 24px;
+        cursor: pointer;
+        color: #6B7280;
+        line-height: 1;
+        padding: 0;
+        transition: color 0.15s;
+        flex-shrink: 0;
+      `;
+      close.onmouseover = function() { this.style.color = '#1F2937'; };
+      close.onmouseout = function() { this.style.color = '#6B7280'; };
+      close.onclick = function() { TPIToast.remove(toast); };
+      
+      toast.appendChild(icon);
+      toast.appendChild(msg);
+      toast.appendChild(close);
+      
+      document.getElementById('tpi-toast-container').appendChild(toast);
+      
+      setTimeout(function() { toast.style.transform = 'translateX(0)'; }, 10);
+      
+      if (duration > 0) {
+        setTimeout(function() { TPIToast.remove(toast); }, duration);
+      }
+    },
+    
+    remove: function(toast) {
+      toast.style.transform = 'translateX(calc(100% + 40px))';
+      setTimeout(function() { 
+        if (toast && toast.parentNode) {
+          toast.parentNode.removeChild(toast);
+        }
+      }, 300);
+    },
+    
+    getIcon: function(type) {
+      var icons = { success: '✓', error: '✕', warning: '⚠', info: 'ℹ' };
+      return icons[type] || icons.info;
+    },
+    
+    getColor: function(type) {
+      var colors = { success: '#10B981', error: '#EF4444', warning: '#F59E0B', info: '#3B82F6' };
+      return colors[type] || colors.info;
+    },
+    
+    success: function(msg, dur) { this.show(msg, 'success', dur); },
+    error: function(msg, dur) { this.show(msg, 'error', dur); },
+    warning: function(msg, dur) { this.show(msg, 'warning', dur); },
+    info: function(msg, dur) { this.show(msg, 'info', dur); }
+  };
+  
+  // 兼容旧的 tpiToast 函数
+  if (!window.tpiToast) {
+    window.tpiToast = function(msg, type) {
+      TPIToast.show(msg, type || 'info');
+    };
+  }
+  
+  console.log('✅ [TPI优化] Toast 通知系统已加载');
+})();
+
+/* ========================================
+   TPI 优化系统 - 加载指示器 v1.0
+======================================== */
+window.TPILoader = {
+  show: function(message) {
+    message = message || '加载中...';
+    
+    if (document.getElementById('tpi-loader')) return;
+    
+    var loader = document.createElement('div');
+    loader.id = 'tpi-loader';
+    loader.innerHTML = `
+      <div style="
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.5);
+        backdrop-filter: blur(4px);
+        z-index: 10000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        transition: opacity 0.2s;
+      ">
+        <div style="
+          background: white;
+          border-radius: 12px;
+          padding: 32px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 16px;
+          box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+          transform: scale(0.9);
+          transition: transform 0.2s;
+        ">
+          <div style="
+            width: 40px; height: 40px;
+            border: 4px solid #E5E7EB;
+            border-top-color: #4A90E2;
+            border-radius: 50%;
+            animation: tpi-spin 0.8s linear infinite;
+          "></div>
+          <p style="margin: 0; font-size: 14px; color: #6B7280; font-family: var(--tpi-font-body, sans-serif);">${message}</p>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(loader);
+    
+    setTimeout(function() {
+      var backdrop = loader.querySelector('div');
+      if (backdrop) {
+        backdrop.style.opacity = '1';
+        var content = backdrop.querySelector('div');
+        if (content) content.style.transform = 'scale(1)';
+      }
+    }, 10);
+  },
+  
+  hide: function() {
+    var loader = document.getElementById('tpi-loader');
+    if (loader) {
+      var backdrop = loader.querySelector('div');
+      if (backdrop) backdrop.style.opacity = '0';
+      setTimeout(function() { 
+        if (loader && loader.parentNode) {
+          loader.parentNode.removeChild(loader);
+        }
+      }, 200);
+    }
+  },
+  
+  update: function(message) {
+    var loader = document.getElementById('tpi-loader');
+    if (loader) {
+      var p = loader.querySelector('p');
+      if (p) p.textContent = message;
+    }
+  }
+};
+
+console.log('✅ [TPI优化] 加载指示器已加载');
+
+/* ========================================
+   TPI 优化系统 - 函数增强包装器
+   为现有函数添加视觉反馈
+======================================== */
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() {
+    console.log('🔄 [TPI优化] 开始增强现有函数...');
+    
+    // 增强上传函数
+    if (typeof window.saveTodaysData !== 'undefined') {
+      var originalSave = window.saveTodaysData;
+      window.saveTodaysData = async function() {
+        console.log('📤 [TPI优化] saveTodaysData 被调用');
+        try {
+          TPILoader.show('正在上传数据到云端...');
+          var result = await originalSave.apply(this, arguments);
+          TPILoader.hide();
+          
+          if (result && result.success !== false) {
+            TPIToast.success('✅ 数据已成功上传到云端');
+          }
+          
+          return result;
+        } catch (error) {
+          TPILoader.hide();
+          console.error('❌ [TPI优化] 上传失败:', error);
+          TPIToast.error('❌ 上传失败：' + (error.message || '未知错误'));
+          throw error;
+        }
+      };
+      console.log('✅ [TPI优化] saveTodaysData 已增强');
+    }
+    
+    // 增强下载函数
+    if (typeof window.loadHistoryFromCloud !== 'undefined') {
+      var originalLoad = window.loadHistoryFromCloud;
+      window.loadHistoryFromCloud = async function() {
+        console.log('📥 [TPI优化] loadHistoryFromCloud 被调用');
+        try {
+          TPILoader.show('正在从云端下载数据...');
+          var result = await originalLoad.apply(this, arguments);
+          TPILoader.hide();
+          
+          if (result && result.success !== false) {
+            TPIToast.success('✅ 数据已成功从云端加载');
+          }
+          
+          return result;
+        } catch (error) {
+          TPILoader.hide();
+          console.error('❌ [TPI优化] 下载失败:', error);
+          TPIToast.error('❌ 下载失败：' + (error.message || '未知错误'));
+          throw error;
+        }
+      };
+      console.log('✅ [TPI优化] loadHistoryFromCloud 已增强');
+    }
+    
+    // 增强签到函数
+    if (typeof window.dailyCheckIn !== 'undefined') {
+      var originalCheckIn = window.dailyCheckIn;
+      window.dailyCheckIn = function() {
+        console.log('✅ [TPI优化] dailyCheckIn 被调用');
+        try {
+          var result = originalCheckIn.apply(this, arguments);
+          TPIToast.success('✅ 签到成功！');
+          return result;
+        } catch (error) {
+          console.error('❌ [TPI优化] 签到失败:', error);
+          TPIToast.error('❌ 签到失败：' + (error.message || '未知错误'));
+          throw error;
+        }
+      };
+      console.log('✅ [TPI优化] dailyCheckIn 已增强');
+    }
+    
+    console.log('✅ [TPI优化] 所有函数增强完成');
+    
+  }, 1500); // 延迟1.5秒确保所有原函数已定义
+});
+
+console.log('✅ [TPI优化] 函数增强包装器已加载');
+</script>
+
 
 </body>
 </html>
