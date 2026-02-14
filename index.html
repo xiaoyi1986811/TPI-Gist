@@ -5360,9 +5360,9 @@ window.exportAsCSV = function() {
         
         <div class="tpi-sync-state"><span style="color:#888;font-size:12px;">已加载日期：<span id="tpi-loaded-date">未加载</span> · 数据来源：<span id="tpi-data-source">—</span></span></div>
 <div class="tpi-sync-buttons">
-          <button type="button" onclick="tpiSaveToday()" class="tpi-btn tpi-btn-blue">⬆️ 同步所选日期到云端</button>
+          <button type="button" onclick="tpiSaveToday()" class="tpi-btn tpi-btn-blue">⬆️ 同步上传所选日期到云端</button>
           <button type="button" onclick="tpiLocalSave()" class="tpi-btn">💾 保存到本地</button>
-          <button type="button" onclick="loadFromGist(getSelectedDate())" class="tpi-btn tpi-btn-cyan">⬇️ 从云端下载所选日期数据</button>
+          <button type="button" onclick="loadFromGist(window.getSelectedDate ? window.getSelectedDate() : (document.getElementById(\'tpi-sync-date\')&&document.getElementById(\'tpi-sync-date\').value)||\'\')" class="tpi-btn tpi-btn-cyan">⬇️ 从云端下载所选日期数据</button>
           <button type="button" onclick="tpiLogout()" class="tpi-btn tpi-btn-red">🚪 退出登录</button>
         </div>
       </div>
@@ -21459,6 +21459,18 @@ const __exp = (function(){
   // 若旧按钮/旧逻辑仍残留调用，保持不报错
   window.saveToGist = window.saveToGist || function(){};
   window.loadFromGist = window.loadFromGist || function(){};
+  // 兼容：供 HTML onclick 使用的选中日期读取（避免 getSelectedDate 作用域不在 window 上导致报错）
+  window.getSelectedDate = window.getSelectedDate || function(){
+    try{
+      const sync = document.getElementById('tpi-sync-date');
+      if(sync && sync.value) return sync.value;
+    }catch(e){}
+    try{
+      const di = document.getElementById('date-input') || document.querySelector('input[placeholder="📅 选择日期"]');
+      if(di && di.value) return di.value;
+    }catch(e){}
+    try{ return (new Date()).toISOString().split('T')[0]; }catch(e){ return ''; }
+  };
 })();
 </script>
 <script>
@@ -27211,7 +27223,7 @@ console.log('');
         'padding:10px 12px;border-radius:12px;' +
         'background:rgba(15,23,42,.92);color:#fff;' +
         'box-shadow:0 10px 24px rgba(0,0,0,.22);' +
-        'font-size:13px;line-height:1.35;letter-spacing:.2px;' +
+        'font-size:13px;line-height:1.35;letter-spacing:.2px;white-space:pre-line;' +
         'opacity:0;transform:translateY(-6px);transition:opacity .18s ease, transform .18s ease;';
       box.appendChild(item);
       requestAnimationFrame(()=>{ item.style.opacity='1'; item.style.transform='translateY(0)'; });
@@ -29440,12 +29452,16 @@ try{
     const el2 = $('sync-status'); // 兼容建议的 sync-status
     if (el) {
       el.textContent = text || '';
+      el.style.whiteSpace = 'pre-line';
       el.style.color = isError ? '#dc2626' : '#065f46';
       el.style.fontWeight = isError ? '700' : '600';
     }
     if (el2 && elementId !== 'sync-status') {
       // sync-status 作为副显示（不覆盖主提示）
-      if (!isError) el2.textContent = text || '';
+      if (!isError) {
+        el2.textContent = text || '';
+        el2.style.whiteSpace = 'pre-line';
+      }
     }
     if (isError) {
       try{ if (typeof toast==='function') toast(text || '操作失败', 'error'); }catch(_){ }
@@ -29746,8 +29762,31 @@ function parseGistFileContent(gistJson){
       ssSet(KEY_TOKEN_SS, token);
        try{ ssRemove(LEGACY_KEY_TOKEN_SS); }catch(e){}
 
-      tpiShowMsg('tpi-sync-msg','✅ 已同步到 Gist', false);
-      toast(`✅ 已同步到 Gist（${dateKey}）`, 'success');
+      // ✅ 上传成功：给出更丰富的同步信息（多行提示）
+      try{
+        const payloadStr = (()=>{ try{ return JSON.stringify(data ?? {}); }catch(e){ return ''; } })();
+        const bytes = payloadStr ? (payloadStr.length) : 0;
+        const updated = (gistJson && gistJson.updated_at) ? String(gistJson.updated_at) : '';
+        const nowIso = (new Date()).toISOString();
+        const gid = String(gistId || GIST_ID || '');
+        const gidShort = gid ? (gid.slice(0,6) + '…' + gid.slice(-4)) : '';
+        const kcnt = (data && typeof data==='object') ? Object.keys(data).length : 0;
+        const msg =
+`✅ 云端同步上传成功
+- 日期：${dateKey}
+- 用户：${username}
+- 命名空间：${nsKey}
+- Gist：${gidShort}
+- 本次数据：${kcnt} 个顶层字段 / 约 ${bytes} 字符
+- 云端更新时间：${updated || '未知'}
+- 本地记录：已回填用户名与 GistId（Token 仅保存在本会话）
+- 时间：${nowIso}`;
+        tpiShowMsg('tpi-sync-msg', msg, false);
+        toast(msg, 'success');
+      }catch(e){
+        tpiShowMsg('tpi-sync-msg','✅ 已同步到 Gist', false);
+        toast(`✅ 已同步到 Gist（${dateKey}）`, 'success');
+      }
 
       // 更新提示行（可选）
       try{ const s = $('sync-status'); if (s) s.textContent = `✅ 已同步到 Gist：${nsKey}`; }catch(e){}
@@ -30021,6 +30060,23 @@ const dateKey = (date && String(date).trim()) ? String(date).trim() : getSelecte
 
       // 保险：强制触发未来雷达渲染（你已有补丁函数）
       try{ if (typeof window.__tpi_forceRenderFutureRadar === 'function') window.__tpi_forceRenderFutureRadar({maxTry:60,delay:50}); }catch(e){}
+
+      // ✅ 下载/恢复成功：更丰富提示
+      try{
+        const payloadStr = (()=>{ try{ return JSON.stringify(dayData ?? {}); }catch(e){ return ''; } })();
+        const bytes = payloadStr ? (payloadStr.length) : 0;
+        const kcnt = (dayData && typeof dayData==='object') ? Object.keys(dayData).length : 0;
+        const lastSeen = ssGet('tpi_gist_last_seen_updated_at','');
+        const msg =
+`📥 云端下载并恢复成功
+- 日期：${dateKey}
+- 用户：${(typeof CURRENT_USERNAME!=='undefined' && CURRENT_USERNAME) ? CURRENT_USERNAME : (lsGet(KEY_USERNAME,'')||'')}
+- 本次数据：${kcnt} 个顶层字段 / 约 ${bytes} 字符
+- 云端更新时间：${lastSeen || '未知'}
+- 已执行：表单恢复 / 分数与图表刷新（随 restoreUIFromData 逻辑）`;
+        tpiShowMsg('tpi-sync-msg', msg, false);
+        toast(msg, 'success');
+      }catch(e){}
 
       return true;
     }catch(err){
