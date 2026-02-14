@@ -1502,7 +1502,6 @@ window.exportAsMarkdown = function () {
 <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
 <!-- 安全增强元标签 -->
 <meta content="nosniff" http-equiv="X-Content-Type-Options"/>
-<meta content="SAMEORIGIN" http-equiv="X-Frame-Options"/>
 <meta content="1; mode=block" http-equiv="X-XSS-Protection"/>
 <meta content="strict-origin-when-cross-origin" name="referrer"/>
 <!-- Netlify部署优化 -->
@@ -29404,7 +29403,7 @@ function updateAuthPanels(){
 }
 
   function ensureAuth({needToken=true} = {}){
-    const { username, gistId, token } = getAuthFromUI();
+    let { username, gistId, token } = getAuthFromUI();
 
     if (!username) {
       // 页面未提供用户名输入框时：使用默认命名空间，避免“登录无反应”
@@ -29425,29 +29424,45 @@ function updateAuthPanels(){
   }
 
   // --- Gist API ---
-  async function gistGet(gistToken){
-    const res = await fetch(GIST_API, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${gistToken}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/vnd.github+json'
-      }
+  // --- Auth fetch helper (Bearer/token fallback) ---
+  async function fetchWithAuth(url, options, gistToken){
+    const baseHeaders = (options && options.headers && typeof options.headers==='object') ? options.headers : {};
+    const opt1 = Object.assign({}, options || {});
+    opt1.headers = Object.assign({}, baseHeaders, {
+      'Authorization': `Bearer ${gistToken}`,
+      'Accept': baseHeaders['Accept'] || 'application/vnd.github+json'
     });
+
+    let res = await fetch(url, opt1);
+    if (res && (res.status === 401 || res.status === 403)) {
+      // Fallback for classic PAT that expects "token" scheme in some environments
+      const opt2 = Object.assign({}, options || {});
+      opt2.headers = Object.assign({}, baseHeaders, {
+        'Authorization': `token ${gistToken}`,
+        'Accept': baseHeaders['Accept'] || 'application/vnd.github+json'
+      });
+      res = await fetch(url, opt2);
+    }
     return res;
   }
 
+  async function gistGet(gistToken){
+    return await fetchWithAuth(GIST_API, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    }, gistToken);
+  }
+
   async function gistPatch(gistToken, payload){
-    const res = await fetch(GIST_API, {
+    return await fetchWithAuth(GIST_API, {
       method: 'PATCH',
       headers: {
-        'Authorization': `Bearer ${gistToken}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/vnd.github+json'
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify(payload)
-    });
-    return res;
+    }, gistToken);
   }
 
   
@@ -29717,13 +29732,7 @@ function parseGistFileContent(gistJson){
 
     // 首先验证 Token 是否有效（调用 GitHub user API）
     try{
-      const userRes = await fetch('https://api.github.com/user', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/vnd.github+json'
-        }
-      });
+      const userRes = await fetchWithAuth('https://api.github.com/user', { method: 'GET' }, token);
       if (userRes.status !== 200) {
         tpiShowMsg('tpi-sync-msg','❌ Token 无效或已过期，请检查 Token 权限', true);
         return false;
