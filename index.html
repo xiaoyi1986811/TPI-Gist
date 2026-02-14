@@ -5361,8 +5361,8 @@ window.exportAsCSV = function() {
         <div class="tpi-sync-state"><span style="color:#888;font-size:12px;">已加载日期：<span id="tpi-loaded-date">未加载</span> · 数据来源：<span id="tpi-data-source">—</span></span></div>
 <div class="tpi-sync-buttons">
           <button type="button" onclick="tpiSaveToday()" class="tpi-btn tpi-btn-blue">⬆️ 同步上传所选日期到云端</button>
+          <button type="button" onclick="tpiLoadToday()" class="tpi-btn tpi-btn-cyan">⬇️ 从云端下载所选日期数据</button>
           <button type="button" onclick="tpiLocalSave()" class="tpi-btn">💾 保存到本地</button>
-          <button type="button" onclick="loadFromGist(window.getSelectedDate ? window.getSelectedDate() : (document.getElementById(\'tpi-sync-date\')&&document.getElementById(\'tpi-sync-date\').value)||\'\')" class="tpi-btn tpi-btn-cyan">⬇️ 从云端下载所选日期数据</button>
           <button type="button" onclick="tpiLogout()" class="tpi-btn tpi-btn-red">🚪 退出登录</button>
         </div>
       </div>
@@ -29753,6 +29753,13 @@ function parseGistFileContent(gistJson){
         }
       }catch(e){}
 
+      // 生成下载摘要（便于核对）
+      const downloadedKeys = (dayData && typeof dayData==='object') ? Object.keys(dayData).sort() : [];
+      const downloadedKcnt = downloadedKeys.length;
+      const downloadedPreview = downloadedKeys.length ? (downloadedKeys.slice(0, 16).join('、') + (downloadedKeys.length > 16 ? '…' : '')) : '';
+      const gidShort = gistId ? (String(gistId).slice(0,6) + '…' + String(gistId).slice(-4)) : '';
+      const remoteUpdatedAt = (gistJson && gistJson.updated_at) ? String(gistJson.updated_at) : '';
+
       // 成功：保存非敏感配置到 localStorage（仅 username / gistId）
       CURRENT_USERNAME = username;
       CURRENT_GIST_ID = gistId;
@@ -29771,6 +29778,8 @@ function parseGistFileContent(gistJson){
         const gid = String(gistId || GIST_ID || '');
         const gidShort = gid ? (gid.slice(0,6) + '…' + gid.slice(-4)) : '';
         const kcnt = (data && typeof data==='object') ? Object.keys(data).length : 0;
+        const keys = (data && typeof data==='object') ? Object.keys(data).sort() : [];
+        const keysPreview = keys.length ? (keys.slice(0, 16).join('、') + (keys.length > 16 ? '…' : '')) : '';
         const msg =
 `✅ 云端同步上传成功
 - 日期：${dateKey}
@@ -29778,6 +29787,7 @@ function parseGistFileContent(gistJson){
 - 命名空间：${nsKey}
 - Gist：${gidShort}
 - 本次数据：${kcnt} 个顶层字段 / 约 ${bytes} 字符
+- 字段：${keysPreview || '（无）'}
 - 云端更新时间：${updated || '未知'}
 - 本地记录：已回填用户名与 GistId（Token 仅保存在本会话）
 - 时间：${nowIso}`;
@@ -29861,9 +29871,20 @@ function parseGistFileContent(gistJson){
       ssSet(KEY_TOKEN_SS, token);
        try{ ssRemove(LEGACY_KEY_TOKEN_SS); }catch(e){}
 
-      tpiShowMsg('tpi-sync-msg',`📥 已从 Gist 加载 ${dateKey} 数据`, false);
-      toast(`📥 已从 Gist 加载 ${dateKey} 数据`, 'info');
-      try{ const s = $('sync-status'); if (s) s.textContent = `📥 已从 Gist 加载：${nsKey}`; }catch(e){}
+      const nowIso = new Date().toISOString();
+      const msg =
+`📥 云端同步下载成功
+- 日期：${dateKey}
+- 用户：${username}
+- 命名空间：${nsKey}
+- Gist：${gidShort}
+- 下载数据：${downloadedKcnt} 个顶层字段
+- 字段：${downloadedPreview || '（无）'}
+- 云端更新时间：${remoteUpdatedAt || '未知'}
+- 时间：${nowIso}`;
+      tpiShowMsg('tpi-sync-msg', msg, false);
+      toast(msg, 'info');
+      try{ const s = $('sync-status'); if (s) s.textContent = `📥 已从云端下载：${nsKey}（${downloadedKcnt}项）`; }catch(e){}
       try{ const ld = $('tpi-loaded-date'); if (ld) ld.textContent = dateKey; }catch(e){}
       try{ const ds = $('tpi-data-source'); if (ds) ds.textContent = '云端(Gist)'; }catch(e){}
 
@@ -30085,6 +30106,12 @@ const dateKey = (date && String(date).trim()) ? String(date).trim() : getSelecte
       return false;
     }
   };
+  // Legacy onclick compatibility: old buttons may still call saveToGist/loadFromGist
+  try{
+    window.saveToGist = function(date){ return window.tpiSaveToday(date); };
+    window.loadFromGist = function(date){ return window.tpiLoadToday(date); };
+  }catch(e){}
+
 
   // 兼容：支持传入任意日期进行同步（历史日期同步）
   window.tpiSaveTodayData = window.tpiSaveToday;
