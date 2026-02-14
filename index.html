@@ -4862,6 +4862,143 @@ window.exportAsCSV = function() {
   }
 })();
 </script>
+<script>
+/* =========================================================
+   去除重复分数看板（登录后可能被旧逻辑再次插入一条“纯文本/旧样式”顶栏）
+   目标：只保留 #tpi-top-scoreboard（卡片式 pill 看板），其它疑似重复顶栏一律移除
+   说明：不改动计分/同步/折叠逻辑，仅做 DOM 去重
+========================================================= */
+(function(){
+  'use strict';
+
+  const KEEP_ID = 'tpi-top-scoreboard';
+  const KEEP_SELECTOR = '#' + KEEP_ID;
+
+  function isElement(n){ return n && n.nodeType === 1; }
+
+  function textOf(el){
+    try{
+      return (el.innerText || el.textContent || '').replace(/\s+/g,' ').trim();
+    }catch(e){ return ''; }
+  }
+
+  function isInsideKeep(el){
+    try{
+      return el.id === KEEP_ID || (typeof el.closest === 'function' && el.closest(KEEP_SELECTOR));
+    }catch(e){ return false; }
+  }
+
+  function looksLikeScorebarText(txt){
+    if (!txt || txt.length < 18) return false;
+    // 必须同时出现多项关键字段，避免误杀普通提示条
+    const hasFields = /MA\s*\d|MA7\s*\d/i.test(txt) &&
+                      /AMI\s*\d/i.test(txt) &&
+                      /FLI\s*\d/i.test(txt) &&
+                      /SYS\s*\d/i.test(txt) &&
+                      /BONUS\s*\d/i.test(txt);
+    const hasTotal = /总分\s*\d/i.test(txt) || /TPI\s*总分\s*\d/i.test(txt);
+    const hasRating = /维护|Baseline|Steady|Excellence|Overload|维持|推进|卓越|过载/i.test(txt);
+    return hasFields && hasTotal && hasRating;
+  }
+
+  function isFixedTop(el){
+    try{
+      const st = getComputedStyle(el);
+      const pos = st.position;
+      if (pos !== 'fixed' && pos !== 'sticky') return false;
+      const top = parseFloat(st.top || '0') || 0;
+      const z = parseInt(st.zIndex || '0', 10) || 0;
+      // 顶部 0~20px，且层级较高（通常是置顶栏）
+      return top <= 20 && z >= 5000;
+    }catch(e){
+      return false;
+    }
+  }
+
+  function removeNode(el, reason){
+    try{
+      console.warn('[TPI] 移除重复分数看板:', reason, el);
+      el.remove();
+    }catch(e){}
+  }
+
+  function dedupeKeepId(){
+    // 如果误插入了第二个同 id 的看板，只保留第一个
+    try{
+      const all = document.querySelectorAll(KEEP_SELECTOR);
+      if (all && all.length > 1){
+        for (let i = 1; i < all.length; i++){
+          removeNode(all[i], 'duplicate #tpi-top-scoreboard');
+        }
+      }
+    }catch(e){}
+  }
+
+  function scan(root){
+    try{
+      if (!root || !document.body) return;
+
+      dedupeKeepId();
+
+      const candidates = (root === document || root === document.body)
+        ? Array.from(document.body.querySelectorAll('*'))
+        : (isElement(root) ? [root].concat(Array.from(root.querySelectorAll('*'))) : []);
+
+      for (const el of candidates){
+        if (!isElement(el)) continue;
+        if (isInsideKeep(el)) continue;
+
+        const txt = textOf(el);
+        if (!looksLikeScorebarText(txt)) continue;
+
+        // 必须是“置顶/粘性顶栏”样式，才视为重复分数看板
+        if (!isFixedTop(el)) continue;
+
+        removeNode(el, 'fixed-top scorebar-like text');
+      }
+    }catch(e){}
+  }
+
+  function start(){
+    scan(document);
+
+    // 监听 DOM 变化，登录后旧逻辑插入顶栏时可立即删除
+    try{
+      const mo = new MutationObserver((mutations)=>{
+        for (const m of mutations){
+          if (!m.addedNodes) continue;
+          m.addedNodes.forEach((n)=>{
+            if (!isElement(n)) return;
+            // 优先快速判断本节点
+            if (!isInsideKeep(n) && isFixedTop(n) && looksLikeScorebarText(textOf(n))){
+              removeNode(n, 'mutation-added scorebar');
+              return;
+            }
+            // 否则扫描其子树
+            scan(n);
+          });
+        }
+      });
+      mo.observe(document.documentElement, { childList: true, subtree: true });
+
+      // 兜底：登录后的异步渲染可能绕过 observer（极少见），短时间轮询一次
+      let ticks = 0;
+      const timer = setInterval(()=>{
+        ticks++;
+        scan(document);
+        if (ticks >= 20) clearInterval(timer); // 约 20s 后停止，避免常驻开销
+      }, 1000);
+    }catch(e){}
+  }
+
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', start, { once: true });
+  } else {
+    start();
+  }
+})();
+</script>
+
 
 <!-- ========== 增强导航系统 第 20 版 ========== -->
 <!-- PWA模式指示器 -->
@@ -23374,6 +23511,45 @@ window.addEventListener('resize', function() {
                     </head>
                     <body>
 
+        <div id="score-dashboard" style="background: linear-gradient(135deg, #e0e7ff 0%, #ddd6fe 100%); padding: 8px 16px; border-radius: 0; margin: 0; color: #1e293b; box-shadow: 0 2px 6px rgba(0,0,0,0.1);">
+            <div style="max-width: 1400px; margin: 0 auto; display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: nowrap;">
+                <!-- 五个部分分数 -->
+                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(255,255,255,0.08); border-radius: 5px;">
+                    <span class="tpi-inline-06">📝 AMI</span>
+                    <span id="dashboard-ami" style="font-size: 15px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(255,255,255,0.08); border-radius: 5px;">
+                    <span class="tpi-inline-06">⚡ BCM</span>
+                    <span id="dashboard-bcm" style="font-size: 15px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(255,255,255,0.08); border-radius: 5px;">
+                    <span class="tpi-inline-06">📦 LOG</span>
+                    <span id="dashboard-logistics" style="font-size: 15px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(255,255,255,0.08); border-radius: 5px;">
+                    <span class="tpi-inline-06">💪 HSM</span>
+                    <span id="dashboard-hsm" style="font-size: 15px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(255,255,255,0.08); border-radius: 5px;">
+                    <span class="tpi-inline-06">🎁 BONUS</span>
+                    <span id="dashboard-bonus" style="font-size: 15px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <!-- TPI总分 -->
+                <div style="display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px; background: rgba(255,255,255,0.15); border-radius: 5px;">
+                    <span class="tpi-inline-06">TPI 总分</span>
+                    <span id="dashboard-total" style="font-size: 20px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <!-- 评级 -->
+                <div id="dashboard-rating" style="font-size: 10px; padding: 4px 10px; background: rgba(255,255,255,0.2); border-radius: 12px; font-weight: 600; white-space: nowrap;">待评级</div>
+
+            </div>
+
                         ${reportContent.innerHTML}
                     </body>
                     </html>
@@ -23673,6 +23849,46 @@ window.addEventListener('resize', function() {
                 mimeType = 'text/csv';
             } else if (format === 'html') {
                 let html = `<html><head><meta charset="UTF-8"><title>TPI数据导出</title></head><body>
+
+        <div id="score-dashboard" style="background: linear-gradient(135deg, #e0e7ff 0%, #ddd6fe 100%); padding: 8px 16px; border-radius: 0; margin: 0; color: #1e293b; box-shadow: 0 2px 6px rgba(0,0,0,0.1);">
+            <div style="max-width: 1400px; margin: 0 auto; display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: nowrap;">
+                <!-- 五个部分分数 -->
+                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(255,255,255,0.08); border-radius: 5px;">
+                    <span class="tpi-inline-06">📝 AMI</span>
+                    <span id="dashboard-ami" style="font-size: 15px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(255,255,255,0.08); border-radius: 5px;">
+                    <span class="tpi-inline-06">⚡ BCM</span>
+                    <span id="dashboard-bcm" style="font-size: 15px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(255,255,255,0.08); border-radius: 5px;">
+                    <span class="tpi-inline-06">📦 LOG</span>
+                    <span id="dashboard-logistics" style="font-size: 15px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(255,255,255,0.08); border-radius: 5px;">
+                    <span class="tpi-inline-06">💪 HSM</span>
+                    <span id="dashboard-hsm" style="font-size: 15px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(255,255,255,0.08); border-radius: 5px;">
+                    <span class="tpi-inline-06">🎁 BONUS</span>
+                    <span id="dashboard-bonus" style="font-size: 15px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <!-- TPI总分 -->
+                <div style="display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px; background: rgba(255,255,255,0.15); border-radius: 5px;">
+                    <span class="tpi-inline-06">TPI 总分</span>
+                    <span id="dashboard-total" style="font-size: 20px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <!-- 评级 -->
+                <div id="dashboard-rating" style="font-size: 10px; padding: 4px 10px; background: rgba(255,255,255,0.2); border-radius: 12px; font-weight: 600; white-space: nowrap;">待评级</div>
+
+            </div>
+';
 
                 `;
 
@@ -24882,6 +25098,44 @@ console.log('✅ 全局函数已定义: copyPreviousDayDataComplete, archiveOldD
     body{font-family:Arial;margin:20px;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ddd;padding:8px;text-align:left;}th{background-color:#4CAF50;color:white;}</style>`;
 html += `</head><body>
 
+        <div id="score-dashboard" style="background: linear-gradient(135deg, #e0e7ff 0%, #ddd6fe 100%); padding: 8px 16px; border-radius: 0; margin: 0; color: #1e293b; box-shadow: 0 2px 6px rgba(0,0,0,0.1);">
+            <div style="max-width: 1400px; margin: 0 auto; display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: nowrap;">
+                <!-- 五个部分分数 -->
+                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(255,255,255,0.08); border-radius: 5px;">
+                    <span class="tpi-inline-06">📝 AMI</span>
+                    <span id="dashboard-ami" style="font-size: 15px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(255,255,255,0.08); border-radius: 5px;">
+                    <span class="tpi-inline-06">⚡ BCM</span>
+                    <span id="dashboard-bcm" style="font-size: 15px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(255,255,255,0.08); border-radius: 5px;">
+                    <span class="tpi-inline-06">📦 LOG</span>
+                    <span id="dashboard-logistics" style="font-size: 15px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(255,255,255,0.08); border-radius: 5px;">
+                    <span class="tpi-inline-06">💪 HSM</span>
+                    <span id="dashboard-hsm" style="font-size: 15px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(255,255,255,0.08); border-radius: 5px;">
+                    <span class="tpi-inline-06">🎁 BONUS</span>
+                    <span id="dashboard-bonus" style="font-size: 15px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <!-- TPI总分 -->
+                <div style="display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px; background: rgba(255,255,255,0.15); border-radius: 5px;">
+                    <span class="tpi-inline-06">TPI 总分</span>
+                    <span id="dashboard-total" style="font-size: 20px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <!-- 评级 -->
+                <div id="dashboard-rating" style="font-size: 10px; padding: 4px 10px; background: rgba(255,255,255,0.2); border-radius: 12px; font-weight: 600; white-space: nowrap;">待评级</div>
+
+            </div>
 <h1>TPI数据导出</h1>`;
                         html += '<table><tr><th>日期</th><th>数据内容</th></tr>';
                         for (let key in allData) {
@@ -25422,7 +25676,7 @@ window.LoadingIndicator = {
 // ═══════════════════════════════════════════════════════════════════
 
 const ScoreDashboard = {
-    // 更新看板显示（顶部置顶看板）
+    // 更新看板显示（顶部置顶看板 + 兼容旧看板）
     update: function() {
         try {
             // 顶部看板字段：MA7 / AMI / FLI / SYS / BONUS / 总分 / 评级
@@ -25445,7 +25699,13 @@ const ScoreDashboard = {
             this.updateElement('ts-bonus', bonusScore.toFixed(1));
             this.updateElement('ts-total', total.toFixed(1));
 
-            // 更新评级
+            // 兼容：若页面仍存在旧看板元素，则一并更新（不影响顶部看板）
+            this.updateElement('dashboard-ami', amiScore.toFixed(1));
+            this.updateElement('dashboard-fli', fliScore.toFixed(1));
+            this.updateElement('dashboard-bonus', bonusScore.toFixed(1));
+            this.updateElement('dashboard-total', total.toFixed(1));
+
+            // 更新评级（顶部看板优先）
             this.updateRating(total);
 
         } catch (error) {
@@ -25479,7 +25739,7 @@ const ScoreDashboard = {
 
     // 更新评级显示（与截图格式一致）
     updateRating: function(total) {
-        const ratingEl = document.getElementById('ts-rating');
+        const ratingEl = document.getElementById('ts-rating') || document.getElementById('dashboard-rating');
         if (!ratingEl) return;
 
         let text = '';
@@ -29096,12 +29356,14 @@ try{
                 // 计算TPI总分（包括FLI）
                 const tpiTotal = amiScore + bcmScore + logisticsScore + hsmScore + fliScore + bonusScore;
                 
-                // 更新顶部看板显示（使用ts-xxx元素）
-                this.updateElement('ts-ami', amiScore.toFixed(1));
-                this.updateElement('ts-sys', bcmScore.toFixed(1));
-                this.updateElement('ts-fli', fliScore.toFixed(1));
-                this.updateElement('ts-bonus', bonusScore.toFixed(1));
-                this.updateElement('ts-total', tpiTotal.toFixed(1));
+                // 更新看板显示
+                this.updateElement('dashboard-ami', amiScore.toFixed(1));
+                this.updateElement('dashboard-bcm', bcmScore.toFixed(1));
+                this.updateElement('dashboard-logistics', logisticsScore.toFixed(1));
+                this.updateElement('dashboard-hsm', hsmScore.toFixed(1));
+                this.updateElement('dashboard-fli', fliScore.toFixed(1));
+                this.updateElement('dashboard-bonus', bonusScore.toFixed(1));
+                this.updateElement('dashboard-total', tpiTotal.toFixed(1));
                 
                 // 更新评级
                 this.updateRating(tpiTotal);
