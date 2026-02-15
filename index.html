@@ -61,10 +61,6 @@
       }
 
       console.log = function(...args){
-        try{
-          const s = (typeof args[0]==='string') ? args[0] : '';
-          if (s.includes('[DataStats]') || s.includes('更新统计被调用')) { return; }
-        }catch(e){}
         if (shouldAllow()) orig.log(...args);
       };
       console.info = function(...args){ if (shouldAllow()) orig.info(...args); };
@@ -457,7 +453,7 @@ window.__tpi_legacy_loadTpiData_1 = function () {
     try{ if (typeof window.__tpi_triggerRecalc === 'function') window.__tpi_triggerRecalc(); }catch(e){}
     // 2.1) 额外保险：刷新分数看板/统计（如果存在）
     try{ if (window.ScoreDashboard && typeof window.ScoreDashboard.update === 'function') window.ScoreDashboard.update(); }catch(e){}
-    try{ if (window.TPI && typeof window.TPI.updateStatistics === 'function') window.TPI.updateStatistics(); }catch(e){}
+    try{ if (window.TPI && typeof window.TPI.updateStatistics === 'function') window.TPI.updateStatistics(true); }catch(e){}  // 静默更新
 
     // 3) 采集快照（包含 _formState + _viewState + 各模块补丁字段）
     let snapObj = null;
@@ -19319,16 +19315,23 @@ try {
 
             /**
              * 更新统计数据
+             * @param {boolean} silent - 是否静默更新（不输出日志）
              */
-            function updateStatistics() {
-                console.log('[DataStats] 更新统计被调用');
+            function updateStatistics(silent = false) {
+                if (!silent) {
+                    console.log('[DataStats] 更新统计被调用');
+                }
                 
                 try {
                     const history = getHistoricalData();
-                    console.log('[DataStats] 获取历史数据，共', history.length, '条记录');
+                    if (!silent) {
+                        console.log('[DataStats] 获取历史数据，共', history.length, '条记录');
+                    }
                     
                     const stats = calculateStatistics(history);
-                    console.log('[DataStats] 统计数据:', stats);
+                    if (!silent) {
+                        console.log('[DataStats] 统计数据:', stats);
+                    }
 
                     // 更新显示
                     const daysCountElem = document.getElementById('stats-days-count');
@@ -19342,7 +19345,9 @@ try {
                     // 更新状态
                     state.dataStats = stats;
                     
-                    console.log('[DataStats] 统计更新完成');
+                    if (!silent) {
+                        console.log('[DataStats] 统计更新完成');
+                    }
 
                 } catch (error) {
                     console.error('[DataStats] 更新统计错误:', error);
@@ -29422,10 +29427,10 @@ try{
         }
       }catch(e){}
 
-      // TPI 仪表盘（不同版本可能是 updateStatistics 或其他名称）
+      // TPI 仪表盘（使用静默模式，避免频繁日志输出）
       try{
         if (window.TPI && typeof window.TPI.updateStatistics === 'function'){
-          window.TPI.updateStatistics();
+          window.TPI.updateStatistics(true); // 静默更新
         }
       }catch(e){}
       try{
@@ -29478,8 +29483,7 @@ try{
       document.addEventListener('input', schedule, true);
       document.addEventListener('change', schedule, true);
 
-      // 3) 兜底定时刷新：防止某些计算路径没触发事件
-      setInterval(safeUpdate, 1200);
+      // 3) 移除了过于频繁的定时刷新，改为只在必要时触发（如表单输入、手动点击等）
     }
 
     if (document.readyState === 'loading'){
