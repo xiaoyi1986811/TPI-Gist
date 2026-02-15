@@ -925,12 +925,8 @@ function __tpi_triggerRecalc() {
       window.TPI.calculateTPI();
     }
   } catch (e) {
-    try{ console.warn('[__tpi_triggerRecalc] TPI计算失败:', e); }catch(_){}
+    console.warn('[__tpi_triggerRecalc] TPI计算失败:', e);
   }
-
-  // ✅ 重算后：刷新 pill 看板 + 强制清理旧看板（避免下载/恢复后回退）
-  try{ if (window.ScoreDashboard && typeof window.ScoreDashboard.update === 'function') window.ScoreDashboard.update(); }catch(e){}
-  try{ if (typeof window.__tpi_killLegacyScoreboards === 'function') window.__tpi_killLegacyScoreboards(); }catch(e){}
 }
 
 
@@ -2766,7 +2762,7 @@ body.dark-theme .sync-help div {
     .modal-body { padding: 20px; }
     .modal-footer { padding: 15px 20px; border-top: 1px solid #eee; display: flex; justify-content: flex-end; gap: 10px; }
     .modal-button { padding: 8px 16px; border-radius: 6px; cursor: pointer; border: none; font-weight: 600; }
-     .quick-nav-container-v19{position:fixed;top:calc(var(--tpi-top-scoreboard-height, 40px) + 10px + env(safe-area-inset-top, 0px));left:0;right:0;z-index:9999;display:flex;justify-content:center;pointer-events:none;padding:0 10px;}.quick-nav-v19{background:rgba(255, 255, 255, 0.98);border-radius:20px;padding:10px 15px;box-shadow:0 10px 40px rgba(0,0,0,0.15);display:flex;gap:8px;flex-wrap:wrap;max-width:95vw;border:2px solid #e2e8f0;backdrop-filter:blur(20px) saturate(180%);pointer-events:auto;transition:all 0.3s cubic-bezier(0.4, 0, 0.2, 1);justify-content:center;align-items:center;}body.dark-mode .quick-nav-v19{background:rgba(30, 41, 59, 0.98);border-color:#334155;}.quick-nav-v19.hidden{transform:translateY(-150%);opacity:0;}.quick-nav-btn-v19{padding:10px 16px;background:linear-gradient(135deg, #2563eb, #1d4ed8);color:white;border:none;border-radius:12px;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s ease;white-space:nowrap;box-shadow:0 2px 8px rgba(37, 99, 235, 0.25);position:relative;overflow:hidden;display:inline-flex;align-items:center;gap:6px;-webkit-tap-highlight-color:transparent;touch-action:manipulation;user-select:none;}.quick-nav-btn-v19::before{content:'';position:absolute;top:0;left:-100%;width:100%;height:100%;background:linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);transition:left 0.5s;}.quick-nav-btn-v19:hover::before{left:100%;}.quick-nav-btn-v19:hover{transform:translateX(-5px);box-shadow:2px 2px 8px rgba(0,0,0,0.2);}.quick-nav-btn-v19.active-section{background:#ffffff !important;color:#2563eb !important;border:2px solid #2563eb !important;box-shadow:0 0 15px rgba(37, 99, 235, 0.4);transform:scale(1.1);font-weight:800;}.event-item.radar-urgent{border-left:5px solid #ef4444 !important;background:#fff1f2;}.event-item.radar-warning{border-left:5px solid #f59e0b !important;background:#fffbeb;}.event-item.radar-safe{border-left:5px solid #10b981 !important;}.quick-nav-btn-v19:active{transform:translateY(-1px) scale(0.98);}.quick-nav-btn-v19.btn-success{background:linear-gradient(135deg, #10b981, #059669);box-shadow:0 2px 8px rgba(16, 185, 129, 0.25);}.quick-nav-btn-v19.btn-success:hover{box-shadow:0 6px 16px rgba(16, 185, 129, 0.4);}.quick-nav-btn-v19.btn-warning{background:linear-gradient(135deg, #f59e0b, #d97706);box-shadow:0 2px 8px rgba(245, 158, 11, 0.25);}.quick-nav-btn-v19.btn-info{background:linear-gradient(135deg, #06b6d4, #0891b2);box-shadow:0 2px 8px rgba(6, 182, 212, 0.25);}.quick-nav-btn-v19.btn-secondary{background:linear-gradient(135deg, #64748b, #475569);box-shadow:0 2px 8px rgba(100, 116, 139, 0.25);}.quick-nav-btn-v19.important::after{content:'⭐';position:absolute;top:-8px;right:-8px;font-size:16px;animation:starPulse 2s ease-in-out infinite;}@keyframes starPulse{0%, 100%{transform:scale(1);opacity:1;}50%{transform:scale(1.2);opacity:0.8;}}.quick-nav-toggle-第18版{position:fixed;top:calc(10px + env(safe-area-inset-top, 0px));right:calc(10px + env(safe-area-inset-right, 0px));width:56px;height:56px;background:linear-gradient(135deg, #2563eb, #1d4ed8);color:white;border:none;border-radius:50%;font-size:24px;cursor:pointer;z-index:10000;box-shadow:0 10px 40px rgba(0,0,0,0.15);display:flex;align-items:center;justify-content:center;transition:all 0.3s ease;-webkit-tap-highlight-color:transparent;}.quick-nav-toggle-第18版:hover{transform:scale(1.1) rotate(90deg);box-shadow:0 10px 40px rgba(37, 99, 235, 0.4);}@media (max-width:768px){.quick-nav-container-v19{top:auto;bottom:calc(10px + env(safe-area-inset-bottom, 0px));}.quick-nav-v19{padding:12px 10px;gap:6px;border-radius:24px;max-height:50vh;overflow-y:auto;-webkit-overflow-scrolling:touch;}.quick-nav-btn-v19{font-size:11px;padding:10px 12px;border-radius:10px;}.quick-nav-btn-v19.important::after{font-size:12px;top:-6px;right:-6px;}.quick-nav-toggle-第18版{top:auto;bottom:calc(10px + env(safe-area-inset-bottom, 0px));right:calc(10px + env(safe-area-inset-right, 0px));width:48px;height:48px;font-size:20px;}}@media (display-mode:standalone){.pwa-indicator-v19{position:fixed;top:calc(5px + env(safe-area-inset-top, 0px));left:calc(5px + env(safe-area-inset-left, 0px));padding:6px 12px;background:linear-gradient(135deg, #10b981, #059669);color:white;border-radius:10px;font-size:11px;font-weight:700;z-index:9998;box-shadow:0 4px 12px rgba(0,0,0,0.15);display:flex;align-items:center;gap:6px;}}@media print{.quick-nav-container-v19, .quick-nav-toggle-第18版, .back-to-top-v19, .pwa-indicator-v19{display:none !important;}}
+     .quick-nav-container-v19{position:fixed;top:calc(66px + env(safe-area-inset-top, 0px));left:0;right:0;z-index:9999;display:flex;justify-content:center;pointer-events:none;padding:0 10px;}.quick-nav-v19{background:rgba(255, 255, 255, 0.98);border-radius:20px;padding:10px 15px;box-shadow:0 10px 40px rgba(0,0,0,0.15);display:flex;gap:8px;flex-wrap:wrap;max-width:95vw;border:2px solid #e2e8f0;backdrop-filter:blur(20px) saturate(180%);pointer-events:auto;transition:all 0.3s cubic-bezier(0.4, 0, 0.2, 1);justify-content:center;align-items:center;}body.dark-mode .quick-nav-v19{background:rgba(30, 41, 59, 0.98);border-color:#334155;}.quick-nav-v19.hidden{transform:translateY(-150%);opacity:0;}.quick-nav-btn-v19{padding:10px 16px;background:linear-gradient(135deg, #2563eb, #1d4ed8);color:white;border:none;border-radius:12px;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s ease;white-space:nowrap;box-shadow:0 2px 8px rgba(37, 99, 235, 0.25);position:relative;overflow:hidden;display:inline-flex;align-items:center;gap:6px;-webkit-tap-highlight-color:transparent;touch-action:manipulation;user-select:none;}.quick-nav-btn-v19::before{content:'';position:absolute;top:0;left:-100%;width:100%;height:100%;background:linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);transition:left 0.5s;}.quick-nav-btn-v19:hover::before{left:100%;}.quick-nav-btn-v19:hover{transform:translateX(-5px);box-shadow:2px 2px 8px rgba(0,0,0,0.2);}.quick-nav-btn-v19.active-section{background:#ffffff !important;color:#2563eb !important;border:2px solid #2563eb !important;box-shadow:0 0 15px rgba(37, 99, 235, 0.4);transform:scale(1.1);font-weight:800;}.event-item.radar-urgent{border-left:5px solid #ef4444 !important;background:#fff1f2;}.event-item.radar-warning{border-left:5px solid #f59e0b !important;background:#fffbeb;}.event-item.radar-safe{border-left:5px solid #10b981 !important;}.quick-nav-btn-v19:active{transform:translateY(-1px) scale(0.98);}.quick-nav-btn-v19.btn-success{background:linear-gradient(135deg, #10b981, #059669);box-shadow:0 2px 8px rgba(16, 185, 129, 0.25);}.quick-nav-btn-v19.btn-success:hover{box-shadow:0 6px 16px rgba(16, 185, 129, 0.4);}.quick-nav-btn-v19.btn-warning{background:linear-gradient(135deg, #f59e0b, #d97706);box-shadow:0 2px 8px rgba(245, 158, 11, 0.25);}.quick-nav-btn-v19.btn-info{background:linear-gradient(135deg, #06b6d4, #0891b2);box-shadow:0 2px 8px rgba(6, 182, 212, 0.25);}.quick-nav-btn-v19.btn-secondary{background:linear-gradient(135deg, #64748b, #475569);box-shadow:0 2px 8px rgba(100, 116, 139, 0.25);}.quick-nav-btn-v19.important::after{content:'⭐';position:absolute;top:-8px;right:-8px;font-size:16px;animation:starPulse 2s ease-in-out infinite;}@keyframes starPulse{0%, 100%{transform:scale(1);opacity:1;}50%{transform:scale(1.2);opacity:0.8;}}.quick-nav-toggle-第18版{position:fixed;top:calc(10px + env(safe-area-inset-top, 0px));right:calc(10px + env(safe-area-inset-right, 0px));width:56px;height:56px;background:linear-gradient(135deg, #2563eb, #1d4ed8);color:white;border:none;border-radius:50%;font-size:24px;cursor:pointer;z-index:10000;box-shadow:0 10px 40px rgba(0,0,0,0.15);display:flex;align-items:center;justify-content:center;transition:all 0.3s ease;-webkit-tap-highlight-color:transparent;}.quick-nav-toggle-第18版:hover{transform:scale(1.1) rotate(90deg);box-shadow:0 10px 40px rgba(37, 99, 235, 0.4);}@media (max-width:768px){.quick-nav-container-v19{top:auto;bottom:calc(10px + env(safe-area-inset-bottom, 0px));}.quick-nav-v19{padding:12px 10px;gap:6px;border-radius:24px;max-height:50vh;overflow-y:auto;-webkit-overflow-scrolling:touch;}.quick-nav-btn-v19{font-size:11px;padding:10px 12px;border-radius:10px;}.quick-nav-btn-v19.important::after{font-size:12px;top:-6px;right:-6px;}.quick-nav-toggle-第18版{top:auto;bottom:calc(10px + env(safe-area-inset-bottom, 0px));right:calc(10px + env(safe-area-inset-right, 0px));width:48px;height:48px;font-size:20px;}}@media (display-mode:standalone){.pwa-indicator-v19{position:fixed;top:calc(5px + env(safe-area-inset-top, 0px));left:calc(5px + env(safe-area-inset-left, 0px));padding:6px 12px;background:linear-gradient(135deg, #10b981, #059669);color:white;border-radius:10px;font-size:11px;font-weight:700;z-index:9998;box-shadow:0 4px 12px rgba(0,0,0,0.15);display:flex;align-items:center;gap:6px;}}@media print{.quick-nav-container-v19, .quick-nav-toggle-第18版, .back-to-top-v19, .pwa-indicator-v19{display:none !important;}}
   </style>
 <!-- ========== 增强导航系统样式结束 ========== -->
 <!-- 必需的第三方库 CDN -->
@@ -4717,329 +4713,66 @@ window.exportAsCSV = function() {
 .tpi-u-mr-4px{margin-right: 4px;}
 .tpi-u-mt-varspacing4{margin-top: var(--spacing-4);}
 </style>
-<style id="tpi-top-scoreboard-style">
-/* ===== 顶部置顶分数看板（紧凑版：不遮盖导航栏） ===== */
-:root{
-  /* 顶部分数看板高度（由 JS 动态测量）；用于把 quick-nav 下移，兜底 40px */
-  --tpi-top-scoreboard-height: 34px;
-}
 
-#tpi-top-scoreboard-spacer{height: var(--tpi-top-scoreboard-height, 34px);}
-#tpi-top-scoreboard{
-  position: fixed;
-  top: env(safe-area-inset-top, 0px);
-  left: 0; right: 0;
-  width: 100%;
-  /* 分数看板必须置顶：位于最上层；quick-nav 会被下移到看板下方 */
-  z-index: 10000;
-  background: linear-gradient(135deg,#e0e7ff 0%,#ddd6fe 100%);
-  padding: 2px 4px; /* 更紧凑（再次缩小） */
-  border-bottom: 1px solid rgba(15,23,42,.08);
-}
-#tpi-top-scoreboard .inner{
-  max-width: 1400px;
-  margin: 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  flex-wrap: nowrap;
-  overflow-x: auto;              /* 小屏横向滚动避免换行变高 */
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;         /* Firefox */
-}
-#tpi-top-scoreboard .inner::-webkit-scrollbar{ display:none; } /* WebKit */
-
-#tpi-top-scoreboard .divider{
-  width: 1px;
-  height: 24px;
-  background: rgba(15,23,42,.10);
-  border-radius: 1px;
-  margin: 0 2px;
-}
-#tpi-top-scoreboard .pill.rating{
-  padding: 4px 10px;
-  font-weight: 800;
-  background: rgba(255,255,255,.65);
-}
-#tpi-top-scoreboard .pill{
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;            /* 更紧凑（再次缩小） */
-  border-radius: 12px;
-  background: rgba(255,255,255,.70);
-  border: 1px solid rgba(15,23,42,.08);
-  box-shadow: 0 2px 10px rgba(0,0,0,.06);
-  color: #0f172a;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  white-space: nowrap;
-}
-#tpi-top-scoreboard .pill .label{
-  display:inline-flex;
-  align-items:center;
-  gap:6px;
-  font-size: 13px;
-  font-weight: 700;
-  opacity: .92;
-}
-#tpi-top-scoreboard .pill .value{
-  font-size: 15px;              /* 再次缩小数字 */
-  font-weight: 800;
-  letter-spacing: .2px;
-  min-width: 40px;
-  text-align: right;
-}
-#tpi-top-scoreboard .pill.total{
-  background: rgba(37,99,235,.10);
-  border-color: rgba(37,99,235,.22);
-}
-#tpi-top-scoreboard .pill.total .value{
-  min-width: 50px;
-}
-@media (max-width: 720px){
-  #tpi-top-scoreboard{ padding:2px 4px; }
-  #tpi-top-scoreboard .pill{ padding:4px 8px; border-radius:12px; }
-  #tpi-top-scoreboard .pill .label{ font-size:11px; }
-  #tpi-top-scoreboard .pill .value{ font-size:14px; min-width:38px; }
-  #tpi-top-scoreboard .pill.total .value{ min-width:46px; }
-}
-</style>
 </head>
 <body>
-<!-- ===== 顶部置顶分数看板（与截图一致） ===== -->
-<div id="tpi-top-scoreboard" aria-label="顶部分数看板">
-  <div class="inner">
-    <div class="pill"><span class="label">📉 MA7</span><span id="ts-ma7" class="value">0.0</span></div>
-    <div class="divider"></div>
-    <div class="pill"><span class="label">📝 AMI</span><span id="ts-ami" class="value">0.0</span></div>
-    <div class="divider"></div>
-    <div class="pill"><span class="label">🧠 FLI</span><span id="ts-fli" class="value">0.0</span></div>
-    <div class="divider"></div>
-    <div class="pill"><span class="label">🧱 SYS</span><span id="ts-sys" class="value">0.0</span></div>
-    <div class="divider"></div>
-    <div class="pill"><span class="label">🎁 BONUS</span><span id="ts-bonus" class="value">0.0</span></div>
-    <div class="pill total"><span class="label">总分</span><span id="ts-total" class="value">0.0</span></div>
-    <div id="ts-rating" class="pill rating">&lt; 95 维护 (Maintenance)</div>
-  </div>
+
+
+
+
+<!-- 分数看板 Score Dashboard -->
+<div id="score-dashboard" style="position: fixed; top: 0; left: 0; right: 0; z-index: 9999; background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); border-bottom: 2px solid #cbd5e1; padding: 8px 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+    <div style="display: flex; justify-content: center; align-items: center; gap: 15px; flex-wrap: wrap; max-width: 1400px; margin: 0 auto;">
+        <!-- MA7 -->
+        <div class="score-item" data-metric="ma7" style="display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
+            <span style="font-size: 18px;">🧭</span>
+            <span style="font-weight: 700; color: #334155; font-size: 13px;">MA7</span>
+            <span class="score-value" data-score="ma7" style="font-weight: 800; color: #1e293b; font-size: 16px; min-width: 32px; text-align: right;">0.0</span>
+        </div>
+        
+        <!-- AMI -->
+        <div class="score-item" data-metric="ami" style="display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
+            <span style="font-size: 18px;">⚔️</span>
+            <span style="font-weight: 700; color: #334155; font-size: 13px;">AMI</span>
+            <span class="score-value" data-score="ami" style="font-weight: 800; color: #1e293b; font-size: 16px; min-width: 32px; text-align: right;">0.0</span>
+        </div>
+        
+        <!-- FLI -->
+        <div class="score-item" data-metric="fli" style="display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
+            <span style="font-size: 18px;">🗣️</span>
+            <span style="font-weight: 700; color: #334155; font-size: 13px;">FLI</span>
+            <span class="score-value" data-score="fli" style="font-weight: 800; color: #1e293b; font-size: 16px; min-width: 32px; text-align: right;">0.0</span>
+        </div>
+        
+        <!-- SYS -->
+        <div class="score-item" data-metric="sys" style="display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
+            <span style="font-size: 18px;">🔧</span>
+            <span style="font-weight: 700; color: #334155; font-size: 13px;">SYS</span>
+            <span class="score-value" data-score="sys" style="font-weight: 800; color: #1e293b; font-size: 16px; min-width: 32px; text-align: right;">0.0</span>
+        </div>
+        
+        <!-- BONUS -->
+        <div class="score-item" data-metric="bonus" style="display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
+            <span style="font-size: 18px;">🎁</span>
+            <span style="font-weight: 700; color: #334155; font-size: 13px;">BONUS</span>
+            <span class="score-value" data-score="bonus" style="font-weight: 800; color: #1e293b; font-size: 16px; min-width: 32px; text-align: right;">0.0</span>
+        </div>
+        
+        <!-- 总分 -->
+        <div class="score-item" data-metric="total" style="display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border-radius: 8px; box-shadow: 0 2px 6px rgba(59, 130, 246, 0.3);">
+            <span style="font-weight: 700; color: white; font-size: 13px;">总分</span>
+            <span class="score-value" data-score="total" style="font-weight: 900; color: white; font-size: 18px; min-width: 36px; text-align: right;">0.0</span>
+        </div>
+        
+        <!-- 评级 -->
+        <div class="score-item" data-metric="rating" style="display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
+            <span style="font-weight: 700; color: #334155; font-size: 22px;" id="rating-emoji">-</span>
+        </div>
+    </div>
 </div>
 
-
-<div id="tpi-top-scoreboard-spacer" aria-hidden="true"></div>
-
-<script>
-/* =========================================================
-   顶部分数看板：置顶 + 自动下移 quick-nav + 自动测量占位高度
-   - 目标：分数看板必须置顶（最上方固定），同时不遮挡 quick-nav
-   - 做法：
-     1) 看板固定在 viewport 顶部（考虑安全区域 safe-area-inset-top）
-     2) 动态测量看板高度写入 --tpi-top-scoreboard-height
-     3) quick-nav-container-v19 的 CSS top 使用该变量自动下移
-========================================================= */
-(function(){
-  function updateHeights(){
-    try{
-      const sb = document.getElementById('tpi-top-scoreboard');
-      if (sb){
-        const h = Math.ceil(sb.getBoundingClientRect().height);
-        document.documentElement.style.setProperty('--tpi-top-scoreboard-height', h + 'px');
-        const spacer = document.getElementById('tpi-top-scoreboard-spacer');
-        if (spacer) spacer.style.height = h + 'px';
-      }
-    }catch(e){}
-  }
-
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', function(){
-      updateHeights();
-      window.addEventListener('resize', updateHeights, {passive:true});
-      // 字体/布局稳定后再测两次，避免高度漂移
-      setTimeout(updateHeights, 200);
-      setTimeout(updateHeights, 800);
-    }, {once:true});
-  } else {
-    updateHeights();
-    window.addEventListener('resize', updateHeights, {passive:true});
-    setTimeout(updateHeights, 200);
-    setTimeout(updateHeights, 800);
-  }
-})();
-</script>
-<script>
-/* =========================================================
-   去除重复分数看板（登录后可能被旧逻辑再次插入一条“纯文本/旧样式”顶栏）
-   目标：只保留 #tpi-top-scoreboard（卡片式 pill 看板），其它疑似重复顶栏一律移除
-   说明：不改动计分/同步/折叠逻辑，仅做 DOM 去重
-========================================================= */
-(function(){
-  'use strict';
-
-  // ===== Legacy Scoreboard Guard =====
-  // 目标：只保留顶部 pill 看板（#tpi-top-scoreboard + ts-*），任何旧看板/重复看板一律隐藏/移除
-  const KEEP_ID = 'tpi-top-scoreboard';
-  const KEEP_SELECTOR = '#' + KEEP_ID;
-
-  // 旧看板常见 id（本页历史遗留）
-  const LEGACY_SELECTORS = [
-    '#score-dashboard',
-    '[id^="dashboard-"]',
-    '#dashboard-rating'
-  ].join(',');
-
-  // 注入强制隐藏样式（即使旧看板被创建，也不会顶开布局）
-  function injectHideCSS(){
-    try{
-      const sid = 'tpi-legacy-scoreboard-hide';
-      if (document.getElementById(sid)) return;
-      const st = document.createElement('style');
-      st.id = sid;
-      st.textContent = `
-        #score-dashboard{ display:none !important; }
-        [id^="dashboard-"]{ display:none !important; }
-        #dashboard-rating{ display:none !important; }
-      `;
-      document.head.appendChild(st);
-    }catch(e){}
-  }
-
-  function isElement(n){ return n && n.nodeType === 1; }
-
-  function isInsideKeep(el){
-    try{
-      return el.id === KEEP_ID || (typeof el.closest === 'function' && !!el.closest(KEEP_SELECTOR));
-    }catch(e){ return false; }
-  }
-
-  function isFixedTop(el){
-    try{
-      const cs = getComputedStyle(el);
-      if (!cs) return false;
-      const pos = cs.position;
-      if (pos !== 'fixed' && pos !== 'sticky') return false;
-      const top = parseFloat(cs.top || '0');
-      return isFinite(top) && top <= 4;
-    }catch(e){ return false; }
-  }
-
-  function textOf(el){
-    try{ return (el.innerText || el.textContent || '').replace(/\s+/g,' ').trim(); }
-    catch(e){ return ''; }
-  }
-
-  function looksLikeScorebarText(txt){
-    // 既保守又够用：出现 “总分/评级” 或 “MA7/AMI/FLI/SYS/BONUS”等关键词之一
-    if (!txt) return false;
-    const t = txt.toLowerCase();
-    const hitA = (t.includes('总分') || t.includes('评级') || t.includes('tpi') || t.includes('score') || t.includes('rating'));
-    const hitB = (t.includes('ma7') || t.includes('ami') || t.includes('fli') || t.includes('sys') || t.includes('bonus'));
-    return hitA && hitB;
-  }
-
-  function removeNode(el){
-    try{ el.remove(); }catch(e){}
-  }
-
-  function hideNode(el){
-    try{
-      el.style.display = 'none';
-      el.setAttribute('aria-hidden','true');
-    }catch(e){}
-  }
-
-  function dedupeKeepId(){
-    // 如果误插入了第二个同 id 的看板，只保留第一个
-    try{
-      const all = document.querySelectorAll(KEEP_SELECTOR);
-      if (all && all.length > 1){
-        for (let i = 1; i < all.length; i++) removeNode(all[i]);
-      }
-    }catch(e){}
-  }
-
-  function killLegacy(root){
-    try{
-      injectHideCSS();
-      if (!document.body) return;
-
-      dedupeKeepId();
-
-      // 1) 旧看板：直接隐藏 + 尽量移除
-      try{
-        const legacy = (root && root.querySelectorAll) ? root.querySelectorAll(LEGACY_SELECTORS) : document.querySelectorAll(LEGACY_SELECTORS);
-        legacy && legacy.forEach(el=>{
-          if (!isElement(el)) return;
-          if (isInsideKeep(el)) return;
-          hideNode(el);
-          // 若是下载流程动态插入的，直接删掉，避免占用 DOM
-          if (el.id === 'score-dashboard') removeNode(el);
-        });
-      }catch(e){}
-
-      // 2) 顶部重复/旧顶栏：固定在顶部且文本像分数条 → 删
-      const candidates = (root === document || root === document.body || !root)
-        ? Array.from(document.body.querySelectorAll('*'))
-        : (isElement(root) ? [root].concat(Array.from(root.querySelectorAll('*'))) : []);
-
-      for (const el of candidates){
-        if (!isElement(el)) continue;
-        if (isInsideKeep(el)) continue;
-        if (!isFixedTop(el)) continue;
-        const txt = textOf(el);
-        if (!looksLikeScorebarText(txt)) continue;
-        removeNode(el);
-      }
-    }catch(e){}
-  }
-
-  // 对外暴露：下载成功后/重算后调用，确保“下载后不回退”
-  window.__tpi_killLegacyScoreboards = function(){
-    try{ killLegacy(document); }catch(e){}
-  };
-
-  function start(){
-    killLegacy(document);
-
-    // MutationObserver：刚插入就删（下载/登录后旧逻辑插入时立刻拦截）
-    try{
-      const mo = new MutationObserver((mutations)=>{
-        for (const m of mutations){
-          if (!m.addedNodes) continue;
-          m.addedNodes.forEach((n)=>{
-            if (!isElement(n)) return;
-            if (isInsideKeep(n)) return;
-
-            // 快速路径：旧看板节点
-            if (n.matches && (n.matches('#score-dashboard') || n.matches('[id^="dashboard-"]') || n.matches('#dashboard-rating'))) {
-              hideNode(n);
-              if (n.id === 'score-dashboard') removeNode(n);
-              return;
-            }
-
-            // 快速路径：固定顶栏重复
-            if (isFixedTop(n) && looksLikeScorebarText(textOf(n))){
-              removeNode(n);
-              return;
-            }
-
-            // 否则扫描子树
-            killLegacy(n);
-          });
-        }
-      });
-      mo.observe(document.documentElement, { childList: true, subtree: true });
-    }catch(e){}
-  }
-
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', start, { once: true });
-  } else {
-    start();
-  }
-})();
-</script>
-
-
+<!-- 占位符，防止内容被遮挡 -->
+<div id="score-dashboard-spacer" style="height: 56px;"></div>
 <!-- ========== 增强导航系统 第 20 版 ========== -->
 <!-- PWA模式指示器 -->
 <div class="pwa-indicator-v19" id="pwaIndicator" style="display:none">
@@ -23551,23 +23284,46 @@ window.addEventListener('resize', function() {
                     </head>
                     <body>
 
-        <div style="padding:8px 14px; margin:0 0 10px 0; border:1px solid #e5e7eb; border-radius:12px; background:#f8fafc; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-              <span style="font-size:12px; color:#64748b;">分项</span>
-              <span style="font-size:12px; padding:3px 10px; border-radius:999px; background:#eef2ff; color:#1e293b;">MA7: <span id="ts-export-ma7">0.0</span></span>
-              <span style="font-size:12px; padding:3px 10px; border-radius:999px; background:#eef2ff; color:#1e293b;">AMI: <span id="ts-export-ami">0.0</span></span>
-              <span style="font-size:12px; padding:3px 10px; border-radius:999px; background:#eef2ff; color:#1e293b;">FLI: <span id="ts-export-fli">0.0</span></span>
-              <span style="font-size:12px; padding:3px 10px; border-radius:999px; background:#eef2ff; color:#1e293b;">SYS: <span id="ts-export-sys">0.0</span></span>
-              <span style="font-size:12px; padding:3px 10px; border-radius:999px; background:#eef2ff; color:#1e293b;">BONUS: <span id="ts-export-bonus">0.0</span></span>
-            </div>
-            <div style="display:flex; align-items:center; gap:10px;">
-              <span style="font-size:12px; color:#64748b;">总分</span>
-              <span style="font-size:16px; font-weight:700; color:#0f172a;" id="ts-export-total">0.0</span>
-              <span style="font-size:12px; padding:3px 10px; border-radius:999px; background:#dbeafe; color:#1e40af; font-weight:700;" id="ts-export-rating">待评级</span>
-            </div>
-        </div>
+        <div id="score-dashboard" style="background: linear-gradient(135deg, #e0e7ff 0%, #ddd6fe 100%); padding: 8px 16px; border-radius: 0; margin: 0; color: #1e293b; box-shadow: 0 2px 6px rgba(0,0,0,0.1);">
+            <div style="max-width: 1400px; margin: 0 auto; display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: nowrap;">
+                <!-- 五个部分分数 -->
+                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(255,255,255,0.08); border-radius: 5px;">
+                    <span class="tpi-inline-06">📝 AMI</span>
+                    <span id="dashboard-ami" style="font-size: 15px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(255,255,255,0.08); border-radius: 5px;">
+                    <span class="tpi-inline-06">⚡ BCM</span>
+                    <span id="dashboard-bcm" style="font-size: 15px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(255,255,255,0.08); border-radius: 5px;">
+                    <span class="tpi-inline-06">📦 LOG</span>
+                    <span id="dashboard-logistics" style="font-size: 15px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(255,255,255,0.08); border-radius: 5px;">
+                    <span class="tpi-inline-06">💪 HSM</span>
+                    <span id="dashboard-hsm" style="font-size: 15px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(255,255,255,0.08); border-radius: 5px;">
+                    <span class="tpi-inline-06">🎁 BONUS</span>
+                    <span id="dashboard-bonus" style="font-size: 15px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <!-- TPI总分 -->
+                <div style="display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px; background: rgba(255,255,255,0.15); border-radius: 5px;">
+                    <span class="tpi-inline-06">TPI 总分</span>
+                    <span id="dashboard-total" style="font-size: 20px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <!-- 评级 -->
+                <div id="dashboard-rating" style="font-size: 10px; padding: 4px 10px; background: rgba(255,255,255,0.2); border-radius: 12px; font-weight: 600; white-space: nowrap;">待评级</div>
 
-${reportContent.innerHTML}
+            </div>
+
+                        ${reportContent.innerHTML}
                     </body>
                     </html>
                 `);
@@ -23867,23 +23623,50 @@ ${reportContent.innerHTML}
             } else if (format === 'html') {
                 let html = `<html><head><meta charset="UTF-8"><title>TPI数据导出</title></head><body>
 
-        <div style="padding:8px 14px; margin:0 0 10px 0; border:1px solid #e5e7eb; border-radius:12px; background:#f8fafc; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-              <span style="font-size:12px; color:#64748b;">分项</span>
-              <span style="font-size:12px; padding:3px 10px; border-radius:999px; background:#eef2ff; color:#1e293b;">MA7: <span id="ts-export-ma7">0.0</span></span>
-              <span style="font-size:12px; padding:3px 10px; border-radius:999px; background:#eef2ff; color:#1e293b;">AMI: <span id="ts-export-ami">0.0</span></span>
-              <span style="font-size:12px; padding:3px 10px; border-radius:999px; background:#eef2ff; color:#1e293b;">FLI: <span id="ts-export-fli">0.0</span></span>
-              <span style="font-size:12px; padding:3px 10px; border-radius:999px; background:#eef2ff; color:#1e293b;">SYS: <span id="ts-export-sys">0.0</span></span>
-              <span style="font-size:12px; padding:3px 10px; border-radius:999px; background:#eef2ff; color:#1e293b;">BONUS: <span id="ts-export-bonus">0.0</span></span>
-            </div>
-            <div style="display:flex; align-items:center; gap:10px;">
-              <span style="font-size:12px; color:#64748b;">总分</span>
-              <span style="font-size:16px; font-weight:700; color:#0f172a;" id="ts-export-total">0.0</span>
-              <span style="font-size:12px; padding:3px 10px; border-radius:999px; background:#dbeafe; color:#1e40af; font-weight:700;" id="ts-export-rating">待评级</span>
-            </div>
-        </div>
+        <div id="score-dashboard" style="background: linear-gradient(135deg, #e0e7ff 0%, #ddd6fe 100%); padding: 8px 16px; border-radius: 0; margin: 0; color: #1e293b; box-shadow: 0 2px 6px rgba(0,0,0,0.1);">
+            <div style="max-width: 1400px; margin: 0 auto; display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: nowrap;">
+                <!-- 五个部分分数 -->
+                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(255,255,255,0.08); border-radius: 5px;">
+                    <span class="tpi-inline-06">📝 AMI</span>
+                    <span id="dashboard-ami" style="font-size: 15px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(255,255,255,0.08); border-radius: 5px;">
+                    <span class="tpi-inline-06">⚡ BCM</span>
+                    <span id="dashboard-bcm" style="font-size: 15px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(255,255,255,0.08); border-radius: 5px;">
+                    <span class="tpi-inline-06">📦 LOG</span>
+                    <span id="dashboard-logistics" style="font-size: 15px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(255,255,255,0.08); border-radius: 5px;">
+                    <span class="tpi-inline-06">💪 HSM</span>
+                    <span id="dashboard-hsm" style="font-size: 15px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(255,255,255,0.08); border-radius: 5px;">
+                    <span class="tpi-inline-06">🎁 BONUS</span>
+                    <span id="dashboard-bonus" style="font-size: 15px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <!-- TPI总分 -->
+                <div style="display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px; background: rgba(255,255,255,0.15); border-radius: 5px;">
+                    <span class="tpi-inline-06">TPI 总分</span>
+                    <span id="dashboard-total" style="font-size: 20px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <!-- 评级 -->
+                <div id="dashboard-rating" style="font-size: 10px; padding: 4px 10px; background: rgba(255,255,255,0.2); border-radius: 12px; font-weight: 600; white-space: nowrap;">待评级</div>
 
-html += '<table border="1" cellpadding="5"><tr><th>键</th><th>值</th></tr>';
+            </div>
+';
+
+                `;
+
+                html += '<h1>TPI数据导出</h1>';
+                html += '<table border="1" cellpadding="5"><tr><th>键</th><th>值</th></tr>';
                 for (let key in allData) {
                     html += '<tr><td>' + key + '</td><td><pre>' + allData[key] + '</pre></td></tr>';
                 }
@@ -25088,23 +24871,46 @@ console.log('✅ 全局函数已定义: copyPreviousDayDataComplete, archiveOldD
     body{font-family:Arial;margin:20px;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ddd;padding:8px;text-align:left;}th{background-color:#4CAF50;color:white;}</style>`;
 html += `</head><body>
 
-        <div style="padding:8px 14px; margin:0 0 10px 0; border:1px solid #e5e7eb; border-radius:12px; background:#f8fafc; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-              <span style="font-size:12px; color:#64748b;">分项</span>
-              <span style="font-size:12px; padding:3px 10px; border-radius:999px; background:#eef2ff; color:#1e293b;">MA7: <span id="ts-export-ma7">0.0</span></span>
-              <span style="font-size:12px; padding:3px 10px; border-radius:999px; background:#eef2ff; color:#1e293b;">AMI: <span id="ts-export-ami">0.0</span></span>
-              <span style="font-size:12px; padding:3px 10px; border-radius:999px; background:#eef2ff; color:#1e293b;">FLI: <span id="ts-export-fli">0.0</span></span>
-              <span style="font-size:12px; padding:3px 10px; border-radius:999px; background:#eef2ff; color:#1e293b;">SYS: <span id="ts-export-sys">0.0</span></span>
-              <span style="font-size:12px; padding:3px 10px; border-radius:999px; background:#eef2ff; color:#1e293b;">BONUS: <span id="ts-export-bonus">0.0</span></span>
-            </div>
-            <div style="display:flex; align-items:center; gap:10px;">
-              <span style="font-size:12px; color:#64748b;">总分</span>
-              <span style="font-size:16px; font-weight:700; color:#0f172a;" id="ts-export-total">0.0</span>
-              <span style="font-size:12px; padding:3px 10px; border-radius:999px; background:#dbeafe; color:#1e40af; font-weight:700;" id="ts-export-rating">待评级</span>
-            </div>
-        </div>
+        <div id="score-dashboard" style="background: linear-gradient(135deg, #e0e7ff 0%, #ddd6fe 100%); padding: 8px 16px; border-radius: 0; margin: 0; color: #1e293b; box-shadow: 0 2px 6px rgba(0,0,0,0.1);">
+            <div style="max-width: 1400px; margin: 0 auto; display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: nowrap;">
+                <!-- 五个部分分数 -->
+                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(255,255,255,0.08); border-radius: 5px;">
+                    <span class="tpi-inline-06">📝 AMI</span>
+                    <span id="dashboard-ami" style="font-size: 15px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(255,255,255,0.08); border-radius: 5px;">
+                    <span class="tpi-inline-06">⚡ BCM</span>
+                    <span id="dashboard-bcm" style="font-size: 15px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(255,255,255,0.08); border-radius: 5px;">
+                    <span class="tpi-inline-06">📦 LOG</span>
+                    <span id="dashboard-logistics" style="font-size: 15px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(255,255,255,0.08); border-radius: 5px;">
+                    <span class="tpi-inline-06">💪 HSM</span>
+                    <span id="dashboard-hsm" style="font-size: 15px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(255,255,255,0.08); border-radius: 5px;">
+                    <span class="tpi-inline-06">🎁 BONUS</span>
+                    <span id="dashboard-bonus" style="font-size: 15px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <!-- TPI总分 -->
+                <div style="display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px; background: rgba(255,255,255,0.15); border-radius: 5px;">
+                    <span class="tpi-inline-06">TPI 总分</span>
+                    <span id="dashboard-total" style="font-size: 20px; font-weight: bold;">0.0</span>
+                </div>
+                <span class="tpi-inline-07">|</span>
+                <!-- 评级 -->
+                <div id="dashboard-rating" style="font-size: 10px; padding: 4px 10px; background: rgba(255,255,255,0.2); border-radius: 12px; font-weight: 600; white-space: nowrap;">待评级</div>
 
-html += '<table><tr><th>日期</th><th>数据内容</th></tr>';
+            </div>
+<h1>TPI数据导出</h1>`;
+                        html += '<table><tr><th>日期</th><th>数据内容</th></tr>';
                         for (let key in allData) {
                             const date = key.replace('tpi_data_', '');
                             html += `<tr><td>${date}</td><td><pre>${allData[key]}</pre></td></tr>`;
@@ -25643,36 +25449,32 @@ window.LoadingIndicator = {
 // ═══════════════════════════════════════════════════════════════════
 
 const ScoreDashboard = {
-    // 仅更新顶部 pill 看板（ts-*）。旧看板一律不更新/不渲染。
+    // 更新看板显示（顶部置顶看板 + 兼容旧看板）
     update: function() {
         try {
-            // 读取分数（来自实时计分系统的输出字段）
+            // 卡片式分数看板字段：AMI / FLI / BONUS / 总分 / 评级
             const ma7Score = this.getScore('ma7-score');
             const amiScore = this.getScore('ami-score');
             const fliScore = this.getScore('fli-score');
             const sysScore = this.getScore('sys-score');
             const bonusScore = this.getScore('bonus-score');
 
+            // 优先用系统已计算出的 tpi-total；若不存在则用各分项求和兜底
             let total = this.getScore('tpi-total');
             const sum = ma7Score + amiScore + fliScore + sysScore + bonusScore;
             if (!isFinite(total) || total === 0) total = sum;
 
-            // ✅ 只更新 pill 看板字段
-            this.updateElement('ts-ma7', ma7Score.toFixed(1));
-            this.updateElement('ts-ami', amiScore.toFixed(1));
-            this.updateElement('ts-fli', fliScore.toFixed(1));
-            this.updateElement('ts-sys', sysScore.toFixed(1));
-            this.updateElement('ts-bonus', bonusScore.toFixed(1));
-            this.updateElement('ts-total', total.toFixed(1));
+            // 卡片式分数看板更新
+            this.updateElement('dashboard-ami', amiScore.toFixed(1));
+            this.updateElement('dashboard-fli', fliScore.toFixed(1));
+            this.updateElement('dashboard-bonus', bonusScore.toFixed(1));
+            this.updateElement('dashboard-total', total.toFixed(1));
 
-            // ✅ 只更新 pill 看板评级
+            // 更新评级
             this.updateRating(total);
 
-            // ✅ 强制清理/隐藏旧看板（避免下载流程回退）
-            try{ if (typeof window.__tpi_killLegacyScoreboards === 'function') window.__tpi_killLegacyScoreboards(); }catch(e){}
         } catch (error) {
-            // 不刷屏：仅 error
-            try{ console.error('分数看板更新失败:', error); }catch(e){}
+            console.error('分数看板更新失败:', error);
         }
     },
 
@@ -25700,25 +25502,38 @@ const ScoreDashboard = {
         }
     },
 
-    // 更新评级显示（只针对 pill 看板）
+    // 更新评级显示（与截图格式一致）
     updateRating: function(total) {
-        const ratingEl = document.getElementById('ts-rating');
+        const ratingEl = document.getElementById('dashboard-rating');
         if (!ratingEl) return;
 
         let text = '';
         let bg = 'rgba(148, 163, 184, 0.30)';
         let border = 'rgba(148, 163, 184, 0.35)';
 
-        if (total >= 95) { text = 'S+'; bg = 'rgba(34, 197, 94, 0.22)'; border = 'rgba(34, 197, 94, 0.35)'; }
-        else if (total >= 90) { text = 'S'; bg = 'rgba(34, 197, 94, 0.18)'; border = 'rgba(34, 197, 94, 0.28)'; }
-        else if (total >= 80) { text = 'A'; bg = 'rgba(59, 130, 246, 0.18)'; border = 'rgba(59, 130, 246, 0.28)'; }
-        else if (total >= 70) { text = 'B'; bg = 'rgba(234, 179, 8, 0.18)'; border = 'rgba(234, 179, 8, 0.28)'; }
-        else if (total >= 60) { text = 'C'; bg = 'rgba(249, 115, 22, 0.18)'; border = 'rgba(249, 115, 22, 0.28)'; }
-        else { text = 'D'; bg = 'rgba(239, 68, 68, 0.16)'; border = 'rgba(239, 68, 68, 0.24)'; }
+        if (total >= 201) {
+            text = '≥ 201 过载 (Overload)';
+            bg = 'rgba(239, 68, 68, 0.22)';
+            border = 'rgba(239, 68, 68, 0.30)';
+        } else if (total >= 156) {
+            text = '≥ 156 卓越 (Excellence)';
+            bg = 'rgba(16, 185, 129, 0.20)';
+            border = 'rgba(16, 185, 129, 0.28)';
+        } else if (total >= 121) {
+            text = '≥ 121 推进 (Steady)';
+            bg = 'rgba(59, 130, 246, 0.18)';
+            border = 'rgba(59, 130, 246, 0.26)';
+        } else if (total >= 95) {
+            text = '≥ 95 维持 (Baseline)';
+            bg = 'rgba(245, 158, 11, 0.18)';
+            border = 'rgba(245, 158, 11, 0.26)';
+        } else {
+            text = '< 95 维护 (Maintenance)';
+        }
 
         ratingEl.textContent = text;
 
-        // 顶部看板为 pill.rating，需要背景/边框
+        // 顶部看板为 pill.rating，需要背景/边框；旧看板则只设背景即可
         try {
             ratingEl.style.background = bg;
             ratingEl.style.borderColor = border;
@@ -25730,23 +25545,28 @@ const ScoreDashboard = {
     // 初始化
     init: function() {
         // 防止重复初始化
-        if (this.initialized) return;
+        if (this.initialized) {
+            console.log('[ScoreDashboard] 已初始化，跳过');
+            return;
+        }
 
         // 页面加载时更新一次
         this.update();
 
         // 监听输入变化：保持实时刷新
-        document.addEventListener('input', () => {
+        document.addEventListener('input', (e) => {
             clearTimeout(this.updateTimer);
             this.updateTimer = setTimeout(() => this.update(), 120);
         });
 
-        document.addEventListener('change', () => {
+        document.addEventListener('change', (e) => {
             clearTimeout(this.updateTimer);
             this.updateTimer = setTimeout(() => this.update(), 120);
         });
 
+        // 标记为已初始化
         this.initialized = true;
+        console.log('[ScoreDashboard] 初始化完成');
     },
 
     updateTimer: null
@@ -30167,10 +29987,6 @@ const dateKey = (date && String(date).trim()) ? String(date).trim() : getSelecte
       // 有数据：完整恢复
       try{
         if (typeof window.restoreUIFromData === 'function') window.restoreUIFromData(dayData);
-      // ✅ 下载后定点修复：只保留 pill 看板，禁止旧看板回退
-      try{ if (typeof window.__tpi_killLegacyScoreboards === 'function') window.__tpi_killLegacyScoreboards(); }catch(e){}
-      try{ if (window.ScoreDashboard && typeof window.ScoreDashboard.update === 'function') window.ScoreDashboard.update(); }catch(e){}
-
       }catch(e){
         console.warn('[restoreUIFromData] failed:', e);
       }
@@ -30641,201 +30457,141 @@ console.log('✅ [TPI优化] 函数增强包装器已加载');
 </script>
 
 
-
 <script>
-/* =========================================================
-   ✅ Pill-Only 终极封锁补丁 (2026-02-15)
-   目的：
-   - 下载成功后 restoreUIFromData() 可能重建旧看板 DOM
-   - 必须在 restore 之后立刻：清场旧 DOM + 仅刷新 pill 看板 + 绝对拦截后续旧插入
-   约束：
-   - 不改实时计分逻辑
-   - 不改同步上传/下载逻辑
-========================================================= */
-(function(){
-  'use strict';
-
-  // ---- 0) 统一清理函数：更强的旧看板删除（不影响 pill 看板） ----
-  function __tpi_killLegacyScoreboards_STRICT(){
-    try{
-      // 明确的旧节点选择器
-      const selectors = [
-        '#scoreBoard',             // 用户提到的旧 id
-        '#score-dashboard',        // 旧看板常见 id
-        '.score-dashboard',        // 旧看板 class
-        '.legacy-board',           // 旧看板 class
-        '[id^="dashboard-"]',      // 一些旧版本前缀
-        '[data-legacy-board="1"]'  // 兜底标记
-      ];
-      selectors.forEach(sel=>{
-        try{
-          document.querySelectorAll(sel).forEach(el=>{ try{ el.remove(); }catch(e){} });
-        }catch(e){}
-      });
-
-      // 文本结构兜底：包含“总分 + 评级”的非 pill 区域节点
-      // 注意：只删 fixed/sticky 或者明显像看板的大块节点，避免误删正文
-      try{
-        const all = document.querySelectorAll('body *');
-        for (const el of all){
-          if (!el || el.nodeType !== 1) continue;
-          if (el.id === 'scoreDashboardPill' || el.closest && el.closest('#scoreDashboardPill')) continue; // pill 白名单
-          const style = (el instanceof HTMLElement) ? getComputedStyle(el) : null;
-          const pos = style ? style.position : '';
-          const looksTop = (pos === 'fixed' || pos === 'sticky');
-          if (!looksTop) continue;
-
-          const txt = (el.innerText || '').replace(/\s+/g,' ').trim();
-          if (!txt) continue;
-          if (txt.includes('总分') && txt.includes('评级')) {
-            try{ el.remove(); }catch(e){}
-          }
-        }
-      }catch(e){}
-    }catch(e){}
-  }
-
-  // 兼容：如果已有弱版函数，保留并叠加增强
-  const __oldKiller = window.__tpi_killLegacyScoreboards;
-  window.__tpi_killLegacyScoreboards = function(){
-    try{ if (typeof __oldKiller === 'function') __oldKiller(); }catch(e){}
-    __tpi_killLegacyScoreboards_STRICT();
-  };
-
-  // ---- 1) 封锁 restoreUIFromData：restore 后立刻清场 + 刷新 pill ----
-  (function(){
-    if (typeof window.restoreUIFromData !== 'function') return;
-    if (window.__tpi_restore_pill_only_patched) return;
-    window.__tpi_restore_pill_only_patched = true;
-
-    const originalRestore = window.restoreUIFromData;
-
-    window.restoreUIFromData = function(data){
-      const result = originalRestore.call(this, data);
-
-      // ① restore 完成后立即清场（同步）
-      try{ window.__tpi_killLegacyScoreboards(); }catch(e){}
-
-      // ② 仅刷新 pill：尽量不传参，让其走既有内部计算（最稳）
-      try{
-        if (window.ScoreDashboard && typeof window.ScoreDashboard.update === 'function') {
-          // 若已有 calculateScore 且返回对象/数值，则尝试传入；失败则无参 update
-          let score = null;
-          try{
-            if (typeof window.calculateScore === 'function') score = window.calculateScore();
-          }catch(e){}
-          try{
-            if (score != null) window.ScoreDashboard.update(score);
-            else window.ScoreDashboard.update();
-          }catch(e2){
-            try{ window.ScoreDashboard.update(); }catch(e3){}
-          }
-        }
-      }catch(e){}
-
-      // ③ 异步兜底：有些旧逻辑会在 restore 后 setTimeout/微任务里再插一次
-      try{
-        setTimeout(()=>{
-          try{ window.__tpi_killLegacyScoreboards(); }catch(e){}
-          try{
-            if (window.ScoreDashboard && typeof window.ScoreDashboard.update === 'function') window.ScoreDashboard.update();
-          }catch(e){}
-        }, 0);
-      }catch(e){}
-
-      return result;
-    };
-  })();
-
-  // ---- 2) MutationObserver：绝对封锁（含文本结构匹配） ----
-  (function(){
-    if (window.__tpi_legacy_board_observer_installed) return;
-    window.__tpi_legacy_board_observer_installed = true;
-
-    const isPill = (node)=> {
-      try{
-        if (!node || node.nodeType !== 1) return false;
-        if (node.id === 'scoreDashboardPill') return true;
-        if (node.closest && node.closest('#scoreDashboardPill')) return true;
-      }catch(e){}
-      return false;
-    };
-
-    const shouldKill = (node)=>{
-      try{
-        if (!node || node.nodeType !== 1) return false;
-        if (isPill(node)) return false;
-
-        // 选择器命中
-        if (node.id === 'scoreBoard') return true;
-        if (node.id === 'score-dashboard') return true;
-        if (node.classList && (node.classList.contains('score-dashboard') || node.classList.contains('legacy-board'))) return true;
-        if (node.getAttribute && node.getAttribute('data-legacy-board') === '1') return true;
-        if (node.id && node.id.startsWith('dashboard-')) return true;
-
-        // 文本结构命中（更激进，但只针对 fixed/sticky 节点）
-        const style = (node instanceof HTMLElement) ? getComputedStyle(node) : null;
-        const pos = style ? style.position : '';
-        if (pos !== 'fixed' && pos !== 'sticky') return false;
-
-        const txt = (node.innerText || '').replace(/\s+/g,' ').trim();
-        if (!txt) return false;
-        return (txt.includes('总分') && txt.includes('评级'));
-      }catch(e){}
-      return false;
-    };
-
-    const obs = new MutationObserver((mutations)=>{
-      for (const m of mutations){
-        if (!m.addedNodes) continue;
-        for (const node of m.addedNodes){
-          if (!node || node.nodeType !== 1) continue;
-
-          // 先杀节点本身
-          if (shouldKill(node)) { try{ node.remove(); }catch(e){} continue; }
-
-          // 再扫其子树（避免一次插入大容器把旧看板包进去）
-          try{
-            const cand = node.querySelectorAll ? node.querySelectorAll('#scoreBoard, #score-dashboard, .score-dashboard, .legacy-board, [id^="dashboard-"], [data-legacy-board="1"]') : [];
-            cand.forEach(el=>{
-              if (!isPill(el)) { try{ el.remove(); }catch(e){} }
+// 分数看板实时同步脚本 V2
+(function() {
+    'use strict';
+    
+    // 更新分数看板
+    function updateScoreDashboard() {
+        try {
+            // 从页面的输入框直接读取分数
+            const scores = {
+                ma7: parseFloat(document.getElementById('ma7-score')?.value) || 0,
+                ami: parseFloat(document.getElementById('ami-score')?.value) || 0,
+                fli: parseFloat(document.getElementById('fli-score')?.value) || 0,
+                sys: parseFloat(document.getElementById('sys-score')?.value) || 0,
+                bonus: parseFloat(document.getElementById('bonus-score')?.value) || 0,
+                total: parseFloat(document.getElementById('tpi-total')?.value) || 0
+            };
+            
+            // 更新看板显示
+            const dashboard = document.getElementById('score-dashboard');
+            if (!dashboard) return;
+            
+            const scoreElements = {
+                ma7: dashboard.querySelector('[data-score="ma7"]'),
+                ami: dashboard.querySelector('[data-score="ami"]'),
+                fli: dashboard.querySelector('[data-score="fli"]'),
+                sys: dashboard.querySelector('[data-score="sys"]'),
+                bonus: dashboard.querySelector('[data-score="bonus"]'),
+                total: dashboard.querySelector('[data-score="total"]')
+            };
+            
+            // 更新各项分数
+            Object.keys(scores).forEach(key => {
+                if (scoreElements[key]) {
+                    scoreElements[key].textContent = scores[key].toFixed(1);
+                }
             });
-          }catch(e){}
+            
+            // 更新评级
+            const ratingEmoji = dashboard.querySelector('#rating-emoji');
+            if (ratingEmoji) {
+                const total = scores.total;
+                let rating = '';
+                if (total >= 201) rating = '🔥'; // Overload
+                else if (total >= 156) rating = 'S'; // Excellence
+                else if (total >= 121) rating = 'A'; // Steady
+                else if (total >= 95) rating = 'B';  // Baseline
+                else if (total > 0) rating = 'D';  // Maintenance
+                else rating = '-';  // 无数据时显示横线
+                
+                ratingEmoji.textContent = rating;
+            }
+            
+        } catch (error) {
+            console.error('[ScoreDashboard] 更新失败:', error);
         }
-      }
-    });
-
-    try{
-      obs.observe(document.body, { childList:true, subtree:true });
-    }catch(e){
-      // body 还没就绪：DOMReady 再挂
-      document.addEventListener('DOMContentLoaded', ()=>{
-        try{ obs.observe(document.body, { childList:true, subtree:true }); }catch(_){}
-      }, {once:true});
     }
-  })();
-
-  // ---- 3) 彻底禁用旧更新路径（如果存在） ----
-  (function(){
-    try{
-      if (window.ScoreDashboard && typeof window.ScoreDashboard === 'object') {
-        if (typeof window.ScoreDashboard.renderLegacy === 'function') window.ScoreDashboard.renderLegacy = function(){};
-        if (typeof window.ScoreDashboard.renderFull === 'function') window.ScoreDashboard.renderFull = function(){};
-      }
-    }catch(e){}
-  })();
-
-  // ---- 4) 启动时也清一次（防止首屏残留） ----
-  try{
-    if (document.readyState === 'loading'){
-      document.addEventListener('DOMContentLoaded', ()=>{ try{ window.__tpi_killLegacyScoreboards(); }catch(e){} }, {once:true});
-    } else {
-      window.__tpi_killLegacyScoreboards();
+    
+    // 监听页面变化
+    function setupObservers() {
+        // 监听所有分数输入框的变化
+        const scoreInputs = [
+            'ma7-score',
+            'ami-score',
+            'fli-score',
+            'sys-score',
+            'bonus-score',
+            'tpi-total'
+        ];
+        
+        scoreInputs.forEach(id => {
+            const input = document.getElementById(id);
+            if (input) {
+                input.addEventListener('input', () => {
+                    setTimeout(updateScoreDashboard, 50);
+                });
+                input.addEventListener('change', () => {
+                    setTimeout(updateScoreDashboard, 50);
+                });
+            }
+        });
+        
+        // 监听所有输入框变化（因为分数可能由其他输入计算得出）
+        const allInputs = document.querySelectorAll('input, textarea, select');
+        allInputs.forEach(input => {
+            input.addEventListener('change', () => {
+                setTimeout(updateScoreDashboard, 200);
+            });
+        });
+        
+        // 监听勾选框变化
+        const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+        checkboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', () => {
+                setTimeout(updateScoreDashboard, 200);
+            });
+        });
+        
+        // 定期更新（每2秒）
+        setInterval(updateScoreDashboard, 2000);
     }
-  }catch(e){}
-
+    
+    // 初始化
+    function init() {
+        // 多重保险：在不同时机都尝试初始化
+        const tryInit = () => {
+            setTimeout(() => {
+                updateScoreDashboard();
+                setupObservers();
+            }, 500);
+        };
+        
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', tryInit);
+        } else {
+            tryInit();
+        }
+        
+        window.addEventListener('load', () => {
+            setTimeout(updateScoreDashboard, 1000);
+            setTimeout(updateScoreDashboard, 2000);
+            setTimeout(updateScoreDashboard, 3000);
+        });
+    }
+    
+    // 暴露全局更新函数
+    window.updateScoreDashboard = updateScoreDashboard;
+    
+    // 启动
+    init();
+    
+    console.log('✅ [ScoreDashboard] 分数看板已加载');
+    
 })();
-</script>
 
+</script>
 </body>
 </html>
