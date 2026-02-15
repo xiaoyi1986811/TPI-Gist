@@ -29582,6 +29582,32 @@ try{
     }
   }
 
+  function tpiBuildSyncReport(kind, meta){
+    try{
+      const lines = [];
+      const k = kind === 'download' ? '📥 云端同步下载成功' : '✅ 云端同步上传成功';
+      lines.push(k);
+      if(meta && meta.dateKey) lines.push(`- 日期：${meta.dateKey}`);
+      if(meta && meta.username) lines.push(`- 用户：${meta.username}`);
+      if(meta && meta.nsKey) lines.push(`- 命名空间：${meta.nsKey}`);
+      if(meta && meta.gidShort) lines.push(`- Gist：${meta.gidShort}`);
+      if(meta && meta.fileName) lines.push(`- 文件：${meta.fileName}${meta.fileSize!=null ? `（${meta.fileSize} bytes）` : ''}`);
+      if(meta && meta.rawUrl) lines.push(`- raw_url：${meta.rawUrl}`);
+      if(meta && meta.version) lines.push(`- 版本：${meta.version}`);
+      if(meta && meta.fieldCount!=null) lines.push(`- 顶层字段：${meta.fieldCount} 个`);
+      if(meta && meta.bytes!=null) lines.push(`- 数据体积：约 ${meta.bytes} 字符`);
+      if(meta && meta.keysPreview) lines.push(`- 字段预览：${meta.keysPreview}`);
+      if(meta && meta.createdAt) lines.push(`- 云端创建：${meta.createdAt}`);
+      if(meta && meta.updatedAt) lines.push(`- 云端更新：${meta.updatedAt}`);
+      if(meta && meta.note) lines.push(`- 备注：${meta.note}`);
+      if(meta && meta.nowIso) lines.push(`- 时间：${meta.nowIso}`);
+      return lines.join('\n');
+    }catch(e){
+      return (kind==='download'?'📥 已从云端下载':'✅ 已同步到云端');
+    }
+  }
+
+
 
 // --- Auth panel toggle (login area vs sync area) ---
 function updateAuthPanels(){
@@ -29863,8 +29889,11 @@ function parseGistFileContent(gistJson){
         }
       }catch(e){}
 
-      // 生成下载摘要（便于核对）
-      const downloadedKeys = (dayData && typeof dayData==='object') ? Object.keys(dayData).sort() : [];
+      // 生成保存摘要（便于核对）
+      const savedDayData = (allData && allData[username] && allData[username][dateKey] && typeof allData[username][dateKey] === 'object')
+        ? allData[username][dateKey]
+        : (data && typeof data === 'object' ? data : {});
+      const downloadedKeys = (savedDayData && typeof savedDayData==='object') ? Object.keys(savedDayData).sort() : [];
       const downloadedKcnt = downloadedKeys.length;
       const downloadedPreview = downloadedKeys.length ? (downloadedKeys.slice(0, 16).join('、') + (downloadedKeys.length > 16 ? '…' : '')) : '';
       const gidShort = gistId ? (String(gistId).slice(0,6) + '…' + String(gistId).slice(-4)) : '';
@@ -29883,24 +29912,41 @@ function parseGistFileContent(gistJson){
       try{
         const payloadStr = (()=>{ try{ return JSON.stringify(data ?? {}); }catch(e){ return ''; } })();
         const bytes = payloadStr ? (payloadStr.length) : 0;
-        const updated = (gistJson && gistJson.updated_at) ? String(gistJson.updated_at) : '';
         const nowIso = (new Date()).toISOString();
         const gid = String(gistId || GIST_ID || '');
         const gidShort = gid ? (gid.slice(0,6) + '…' + gid.slice(-4)) : '';
         const kcnt = (data && typeof data==='object') ? Object.keys(data).length : 0;
         const keys = (data && typeof data==='object') ? Object.keys(data).sort() : [];
-        const keysPreview = keys.length ? (keys.slice(0, 16).join('、') + (keys.length > 16 ? '…' : '')) : '';
-        const msg =
-`✅ 云端同步上传成功
-- 日期：${dateKey}
-- 用户：${username}
-- 命名空间：${nsKey}
-- Gist：${gidShort}
-- 本次数据：${kcnt} 个顶层字段 / 约 ${bytes} 字符
-- 字段：${keysPreview || '（无）'}
-- 云端更新时间：${updated || '未知'}
-- 本地记录：已回填用户名与 GistId（Token 仅保存在本会话）
-- 时间：${nowIso}`;
+        const keysPreview = keys.length ? (keys.slice(0, 24).join('、') + (keys.length > 24 ? '…' : '')) : '';
+
+        // 解析 Gist 元信息（文件名 / 大小 / raw_url / 版本 / created_at / updated_at）
+        let fileName='', fileSize=null, rawUrl='', version='', createdAt='', updatedAt='';
+        try{
+          createdAt = (gistJson && gistJson.created_at) ? String(gistJson.created_at) : '';
+          updatedAt = (gistJson && gistJson.updated_at) ? String(gistJson.updated_at) : '';
+          version = (gistJson && gistJson.history && gistJson.history[0] && gistJson.history[0].version) ? String(gistJson.history[0].version) : '';
+          const files = (gistJson && gistJson.files) ? gistJson.files : null;
+          if(files && typeof files==='object'){
+            const firstKey = Object.keys(files)[0];
+            if(firstKey){
+              const f = files[firstKey];
+              fileName = firstKey;
+              fileSize = (f && typeof f.size==='number') ? f.size : null;
+              rawUrl = (f && f.raw_url) ? String(f.raw_url) : '';
+            }
+          }
+        }catch(e){}
+
+        const msg = tpiBuildSyncReport('upload', {
+          dateKey, username, nsKey, gidShort,
+          fileName, fileSize, rawUrl, version,
+          createdAt, updatedAt,
+          fieldCount: kcnt,
+          bytes,
+          keysPreview: keysPreview || '',
+          note: '已回填用户名与 GistId（Token 仅保存在本会话）',
+          nowIso
+        });
         tpiShowMsg('tpi-sync-msg', msg, false);
         toast(msg, 'success');
       }catch(e){
@@ -29992,16 +30038,34 @@ function parseGistFileContent(gistJson){
       const downloadedPreview = downloadedKeys.slice(0,16).join('、') + (downloadedKeys.length > 16 ? '…' : '');
 
       const nowIso = new Date().toISOString();
-      const msg =
-`📥 云端同步下载成功
-- 日期：${dateKey}
-- 用户：${username}
-- 命名空间：${nsKey}
-- Gist：${gidShort}
-- 下载数据：${downloadedKcnt} 个顶层字段
-- 字段：${downloadedPreview || '（无）'}
-- 云端更新时间：${remoteUpdatedAt || '未知'}
-- 时间：${nowIso}`;
+      const nowIso = new Date().toISOString();
+
+      // 解析 Gist 元信息（文件名 / 大小 / raw_url / 版本 / created_at / updated_at）
+      let fileName='', fileSize=null, rawUrl='', version='', createdAt='';
+      try{
+        createdAt = (gistJson && gistJson.created_at) ? String(gistJson.created_at) : '';
+        version = (gistJson && gistJson.history && gistJson.history[0] && gistJson.history[0].version) ? String(gistJson.history[0].version) : '';
+        const files = (gistJson && gistJson.files) ? gistJson.files : null;
+        if(files && typeof files==='object'){
+          const firstKey = Object.keys(files)[0];
+          if(firstKey){
+            const f = files[firstKey];
+            fileName = firstKey;
+            fileSize = (f && typeof f.size==='number') ? f.size : null;
+            rawUrl = (f && f.raw_url) ? String(f.raw_url) : '';
+          }
+        }
+      }catch(e){}
+
+      const msg = tpiBuildSyncReport('download', {
+        dateKey, username, nsKey, gidShort,
+        fileName, fileSize, rawUrl, version,
+        createdAt,
+        updatedAt: remoteUpdatedAt || '',
+        fieldCount: downloadedKcnt,
+        keysPreview: downloadedPreview || '',
+        nowIso
+      });
       tpiShowMsg('tpi-sync-msg', msg, false);
       toast(msg, 'info');
       try{ const s = $('sync-status'); if (s) s.textContent = `📥 已从云端下载：${nsKey}（${downloadedKcnt}项）`; }catch(e){}
