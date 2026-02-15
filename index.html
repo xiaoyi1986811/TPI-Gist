@@ -18669,7 +18669,10 @@ try {
                     const dataStr = __tpi_ls_get(key);
 
                     if (!dataStr) {
-                        showNotification('❌ 未找到该日期的保存数据', 'error');
+                        // 修复：没有数据时清空表单，而不是报错
+                        console.log('ℹ️ 该日期暂无保存数据，显示空白表单');
+                        __tpi_clearAllForm(); // 清空所有表单
+                        updateStatistics(); // 更新统计显示为0
                         return;
                     }
 
@@ -21057,8 +21060,15 @@ const __exp = (function(){
                         // 检查数据是否存在
                         const dataStr = __tpi_ls_get(key);
                         if (!dataStr) {
-                            console.warn('⚠️ [TPI.loadFromLocalStorage] 未找到数据');
-                            alert('⚠️ 未找到该日期的保存数据\n\n日期: ' + dateStr + '\nkey: ' + key);
+                            console.log('ℹ️ [TPI.loadFromLocalStorage] 该日期暂无保存数据，显示空白表单');
+                            // 清空表单而不是报错
+                            if (typeof __tpi_clearAllForm === 'function') {
+                                __tpi_clearAllForm();
+                            }
+                            // 更新统计显示
+                            if (typeof updateStatistics === 'function') {
+                                updateStatistics();
+                            }
                             return;
                         }
                         
