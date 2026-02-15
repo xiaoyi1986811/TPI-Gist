@@ -1081,27 +1081,48 @@ window.collectDailyData = function() {
     if (_ciRaw) data["checkinData"] = JSON.parse(_ciRaw);
   } catch (_e) { console.warn('[collectDailyData] checkinData pack failed:', _e); }
 
-  // 新增：完整表单 + 规则生成视图
-  data["_formState"] = __tpi_collectFormState();
-  // ✅ 二次保险：防止历史缓存/遗漏字段导致 token 被带入导出/同步内容
+  // ✅ 关键增强：完整表单状态收集（在旧字段之后执行，确保覆盖/补全）
   try {
-    if (data["_formState"] && typeof data["_formState"] === 'object') {
-      delete data["_formState"]["#github-token"];
-      delete data["_formState"]["#github_token"];
-      Object.keys(data["_formState"]).forEach(k => {
-        const it = data["_formState"][k];
+    const formState = __tpi_collectFormState();
+    if (formState && typeof formState === 'object') {
+      data["_formState"] = formState;
+      // 二次保险：防止token泄露
+      Object.keys(formState).forEach(k => {
+        const it = formState[k];
         const sel = it && it.selector ? String(it.selector) : '';
         if (/github-token|github_token/i.test(k) || /github-token|github_token/i.test(sel) || /token|secret|password|pat/i.test(k)) {
-          delete data["_formState"][k];
+          delete formState[k];
         }
       });
     }
+  } catch (e) {
+    console.warn('[collectDailyData] formState collect failed:', e);
+  }
+
+  // ✅ 收集规则生成的视图状态
+  try {
+    data["_viewState"] = __tpi_collectViewState();
+  } catch (e) {
+    console.warn('[collectDailyData] viewState collect failed:', e);
+  }
+
+  // ✅ 设备ID和时间戳
+  try {
+    data["_deviceId"] = (typeof getOrCreateDeviceId === 'function') ? getOrCreateDeviceId() : (__tpi_ls_get('tpi_device_id') || '');
+    data["_lastModified"] = new Date().toISOString();
   } catch (e) {}
 
-  data["_viewState"] = __tpi_collectViewState();
-  data["_deviceId"] = (typeof getOrCreateDeviceId === 'function') ? getOrCreateDeviceId() : (__tpi_ls_get('tpi_device_id') || '');
-  data["_lastModified"] = new Date().toISOString();
-
+  // ✅ 最终清理：确保没有敏感信息
+  try {
+    delete data.gistToken;
+    delete data['github-token'];
+    delete data['github_token'];
+    if (data._formState) {
+      delete data._formState['#gistToken'];
+      delete data._formState['#github-token'];
+      delete data._formState['#github_token'];
+    }
+  } catch (e) {}
 
   return { [date]: data };
 };
@@ -1112,11 +1133,15 @@ window.restoreUIFromData = function(data) {
     return;
   }
 
+  console.log('[restoreUIFromData] 开始恢复数据，字段数:', Object.keys(data).length);
 
   // 先恢复日期
   let dateInput = document.getElementById('date-input');
   if (!dateInput) dateInput = document.querySelector('input[placeholder="📅 选择日期"]');
-  if (dateInput && data["date-input"]) dateInput.value = data["date-input"];
+  if (dateInput && data["date-input"]) {
+    dateInput.value = data["date-input"];
+    console.log('[restoreUIFromData] 恢复日期:', data["date-input"]);
+  }
 
 
   // 先按旧方式恢复（保证兼容旧模块）
@@ -1126,17 +1151,31 @@ window.restoreUIFromData = function(data) {
     FIELDS.booleanFields.forEach(key => { const el = document.getElementById(key); if (el && data[key] !== undefined) el.checked = !!data[key]; });
     FIELDS.textFields.forEach(key => { const el = document.getElementById(key); if (el && data[key] !== undefined) el.value = String(data[key] || ""); });
     FIELDS.selectFields.forEach(key => { const el = document.getElementById(key); if (el && data[key] !== undefined) el.value = data[key]; });
+    console.log('[restoreUIFromData] 旧字段恢复完成');
   } catch (e) {
     console.warn('[restoreUIFromData] legacy restore failed:', e);
   }
 
 
-  // 再恢复完整控件状态（覆盖/补齐未被 FIELDS 包含的字段）
-  __tpi_restoreFormState(data["_formState"]);
+  // ✅ 关键增强：完整恢复表单状态（覆盖/补齐未被 FIELDS 包含的字段）
+  try {
+    if (data["_formState"] && typeof data["_formState"] === 'object') {
+      __tpi_restoreFormState(data["_formState"]);
+      console.log('[restoreUIFromData] _formState 恢复完成，项数:', Object.keys(data["_formState"]).length);
+    }
+  } catch (e) {
+    console.warn('[restoreUIFromData] formState restore failed:', e);
+  }
 
 
   // 可选恢复：规则生成显示文本（不会写 DOM 结构，不会破坏弹窗/折叠）
-  __tpi_restoreViewState(data["_viewState"]);
+  try {
+    if (data["_viewState"]) {
+      __tpi_restoreViewState(data["_viewState"]);
+    }
+  } catch (e) {
+    console.warn('[restoreUIFromData] viewState restore failed:', e);
+  }
 
 
   // ✅ [草稿54 Patch] 恢复未来事件雷达（写回 localStorage + 刷新 UI）
@@ -30192,7 +30231,7 @@ function parseGistFileContent(gistJson){
       // Prefer existing saver if already exposed
       if (typeof window.saveToLocalStorage === 'function') {
         window.saveToLocalStorage();
-        try{ tpiShowMsg('tpi-sync-msg','✅ 已保存到本地（localStorage）', false); }catch(e){}
+        // 静默保存，不显示消息（避免与云端同步消息混淆）
         return true;
       }
       // If saver exists in current scope but not exposed yet, expose and call it
@@ -30200,7 +30239,7 @@ function parseGistFileContent(gistJson){
         if (typeof saveToLocalStorage === 'function') {
           window.saveToLocalStorage = saveToLocalStorage;
           window.saveToLocalStorage();
-          try{ tpiShowMsg('tpi-sync-msg','✅ 已保存到本地（localStorage）', false); }catch(e){}
+          // 静默保存
           return true;
         }
       }catch(e){}
@@ -30212,7 +30251,7 @@ function parseGistFileContent(gistJson){
       const dataStr = JSON.stringify(dayData || {});
       if (typeof __tpi_ls_set === 'function') __tpi_ls_set(key, dataStr);
       else localStorage.setItem(key, dataStr);
-      try{ tpiShowMsg('tpi-sync-msg','✅ 已保存到本地（fallback）', false); }catch(e){}
+      // 静默保存本地快照（避免干扰云端同步提示）
       return true;
     }catch(err){
       console.error('[tpiLocalSave] failed:', err);
@@ -30224,13 +30263,25 @@ function parseGistFileContent(gistJson){
 window.tpiSaveToday = async function(date){
     try{
       const dateKey = (date && String(date).trim()) ? String(date).trim() : getSelectedDate();
-      // Ensure latest UI is saved to localStorage before uploading
-      try{ if (typeof window.tpiLocalSave === 'function') window.tpiLocalSave(); }catch(e){}
+      
+      // ✅ 关键修复：上传前先静默保存本地快照（确保 collectDailyData 能采集到最新输入）
+      try{ 
+        if (typeof window.tpiLocalSave === 'function') {
+          window.tpiLocalSave(); 
+        }
+      }catch(e){
+        console.warn('[tpiSaveToday] 本地快照保存警告:', e);
+      }
+
+      // 延迟50ms确保localStorage写入完成
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // collectDailyData() 返回 { [date]: dayData }
       let obj = null;
       try{ if (typeof window.collectDailyData === 'function') obj = window.collectDailyData(); }catch(e){}
       const dayData = (obj && typeof obj === 'object' && obj[dateKey] && typeof obj[dateKey]==='object') ? obj[dateKey] : {};
+      
+      // ✅ 上传到云端
       return await window.tpiSaveData(dateKey, dayData);
     }catch(err){
       console.error('[tpiSaveToday] failed:', err);
@@ -30255,15 +30306,79 @@ const dateKey = (date && String(date).trim()) ? String(date).trim() : getSelecte
         return true;
       }
 
+      // ✅ 关键修复：恢复前先确保日期输入框正确
+      try{ 
+        const di = $('date-input'); 
+        if (di && dayData['date-input']) {
+          di.value = dayData['date-input'];
+        } else if (di) {
+          di.value = dateKey;
+        }
+      }catch(e){}
+
       // 有数据：完整恢复
       try{
-        if (typeof window.restoreUIFromData === 'function') window.restoreUIFromData(dayData);
+        if (typeof window.restoreUIFromData === 'function') {
+          window.restoreUIFromData(dayData);
+        }
       }catch(e){
         console.warn('[restoreUIFromData] failed:', e);
       }
 
-      // 保险：强制触发未来雷达渲染（你已有补丁函数）
-      try{ if (typeof window.__tpi_forceRenderFutureRadar === 'function') window.__tpi_forceRenderFutureRadar({maxTry:60,delay:50}); }catch(e){}
+      // ✅ 多重保险：确保所有动态内容都正确渲染
+      // 1. 强制触发未来雷达渲染
+      try{ 
+        if (typeof window.__tpi_forceRenderFutureRadar === 'function') {
+          window.__tpi_forceRenderFutureRadar({maxTry:80,delay:80});
+        }
+      }catch(e){
+        console.warn('[未来雷达渲染] 警告:', e);
+      }
+
+      // 2. 刷新杂事记录UI
+      try{
+        if (window.MiscLog && typeof window.MiscLog.render === 'function') {
+          setTimeout(() => window.MiscLog.render(), 100);
+        }
+      }catch(e){}
+
+      // 3. 刷新签到状态
+      try{
+        if (typeof window.__tpi_refreshCheckin === 'function') {
+          setTimeout(() => window.__tpi_refreshCheckin(), 150);
+        }
+      }catch(e){}
+
+      // 4. 强制重新计算所有分数和评级
+      try{
+        if (typeof window.__tpi_triggerRecalc === 'function') {
+          setTimeout(() => window.__tpi_triggerRecalc(), 200);
+        }
+      }catch(e){}
+
+      // 5. 刷新分数看板
+      try{
+        if (window.ScoreDashboard && typeof window.ScoreDashboard.update === 'function') {
+          setTimeout(() => window.ScoreDashboard.update(), 250);
+        }
+      }catch(e){}
+
+      // 6. 刷新TPI仪表盘
+      try{
+        if (window.TPI && typeof window.TPI.updateStatistics === 'function') {
+          setTimeout(() => window.TPI.updateStatistics(false), 300);
+        }
+        if (window.TPI && typeof window.TPI.updateTPIDashboard === 'function') {
+          setTimeout(() => window.TPI.updateTPIDashboard(), 350);
+        }
+      }catch(e){}
+
+      // 7. 刷新里程碑徽章
+      try{
+        if (typeof window.__tpi_updateMilestoneBadges === 'function') {
+          setTimeout(() => window.__tpi_updateMilestoneBadges(), 400);
+        }
+      }catch(e){}
 
       // ✅ 下载/恢复成功：更丰富提示
       try{
@@ -30279,8 +30394,10 @@ const dateKey = (date && String(date).trim()) ? String(date).trim() : getSelecte
 - 云端更新时间：${lastSeen || '未知'}
 - 已执行：表单恢复 / 分数与图表刷新（随 restoreUIFromData 逻辑）`;
         tpiShowMsg('tpi-sync-msg', msg, false);
-        toast(msg, 'success');
-      }catch(e){}
+        toast('✅ 数据恢复完成，所有内容已同步', 'success');
+      }catch(e){
+        tpiShowMsg('tpi-sync-msg', `✅ 已从云端加载 ${dateKey} 数据`, false);
+      }
 
       return true;
     }catch(err){
