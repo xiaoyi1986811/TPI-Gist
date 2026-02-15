@@ -25578,54 +25578,74 @@ const ScoreDashboard = {
     // 更新看板显示（顶部置顶看板 + 兼容旧看板）
     update: function() {
         try {
-            // 🔧 修复：移除这里对calculateTPI的调用，避免无限循环
-            // ScoreDashboard只负责显示，不负责计算
-            // 计算应该由用户输入事件触发，而不是显示刷新触发
-
-            // 直接读取分数（不触发计算）
-            try {
-                // 卡片式分数看板字段：MA7 / AMI / FLI / SYS / BONUS / 总分
-                const ma7Score = this.getScore('ma7-score');
-                const amiScore = this.getScore('ami-score');
-                const fliScore = this.getScore('fli-score');
-                const sysScore = this.getScore('sys-score');
-                const bonusScore = this.getScore('bonus-score');
-
-                // 优先用系统已计算出的 tpi-total；若不存在则用各分项求和兜底
-                let total = this.getScore('tpi-total');
-                const sum = amiScore + fliScore + sysScore + bonusScore;
-                if (!isFinite(total) || total === 0) total = sum;
-
-                // ✅ 减少日志频率，避免控制台刷屏
-                if (!this._lastLogTime || Date.now() - this._lastLogTime > 2000) {
-                    console.log('[ScoreDashboard] 分数更新:', {
-                        MA7: ma7Score,
-                        AMI: amiScore,
-                        FLI: fliScore,
-                        SYS: sysScore,
-                        BONUS: bonusScore,
-                        总分: total
-                    });
-                    this._lastLogTime = Date.now();
+            // ✅ 修复：需要先触发计算，但使用防抖避免过度调用
+            // 使用immediate方法立即获取最新值，但不会频繁触发
+            if (!this._isUpdating) {
+                this._isUpdating = true;
+                
+                // 触发一次TPI计算（使用防抖的立即执行版本）
+                try {
+                    if (typeof window.calculateTPI !== 'undefined' && typeof window.calculateTPI.immediate === 'function') {
+                        window.calculateTPI.immediate();
+                    } else if (typeof window.calculateTPI === 'function') {
+                        window.calculateTPI();
+                    } else if (window.TPI && typeof window.TPI.calculateTPI === 'function') {
+                        window.TPI.calculateTPI();
+                    }
+                } catch (e) {
+                    console.warn('[ScoreDashboard] 触发TPI计算失败:', e);
                 }
+                
+                // 短暂延迟后读取分数并更新显示
+                setTimeout(() => {
+                    try {
+                        // 卡片式分数看板字段：MA7 / AMI / FLI / SYS / BONUS / 总分
+                        const ma7Score = this.getScore('ma7-score');
+                        const amiScore = this.getScore('ami-score');
+                        const fliScore = this.getScore('fli-score');
+                        const sysScore = this.getScore('sys-score');
+                        const bonusScore = this.getScore('bonus-score');
 
-                // 卡片式分数看板更新
-                this.updateElement('dashboard-ma7', ma7Score.toFixed(1));
-                this.updateElement('dashboard-ami', amiScore.toFixed(1));
-                this.updateElement('dashboard-fli', fliScore.toFixed(1));
-                this.updateElement('dashboard-sys', sysScore.toFixed(1));
-                this.updateElement('dashboard-bonus', bonusScore.toFixed(1));
-                this.updateElement('dashboard-total', total.toFixed(1));
+                        // 优先用系统已计算出的 tpi-total；若不存在则用各分项求和兜底
+                        let total = this.getScore('tpi-total');
+                        const sum = amiScore + fliScore + sysScore + bonusScore;
+                        if (!isFinite(total) || total === 0) total = sum;
 
-                // 更新评级
-                this.updateRating(total);
+                        // ✅ 减少日志频率，避免控制台刷屏
+                        if (!this._lastLogTime || Date.now() - this._lastLogTime > 2000) {
+                            console.log('[ScoreDashboard] 分数更新:', {
+                                MA7: ma7Score,
+                                AMI: amiScore,
+                                FLI: fliScore,
+                                SYS: sysScore,
+                                BONUS: bonusScore,
+                                总分: total
+                            });
+                            this._lastLogTime = Date.now();
+                        }
 
-            } catch (error) {
-                console.error('[ScoreDashboard] 分数更新失败:', error);
+                        // 卡片式分数看板更新
+                        this.updateElement('dashboard-ma7', ma7Score.toFixed(1));
+                        this.updateElement('dashboard-ami', amiScore.toFixed(1));
+                        this.updateElement('dashboard-fli', fliScore.toFixed(1));
+                        this.updateElement('dashboard-sys', sysScore.toFixed(1));
+                        this.updateElement('dashboard-bonus', bonusScore.toFixed(1));
+                        this.updateElement('dashboard-total', total.toFixed(1));
+
+                        // 更新评级
+                        this.updateRating(total);
+
+                    } catch (error) {
+                        console.error('[ScoreDashboard] 分数更新失败:', error);
+                    }
+                    
+                    this._isUpdating = false;
+                }, 50); // 50ms延迟确保计算完成
             }
 
         } catch (error) {
             console.error('[ScoreDashboard] 更新失败:', error);
+            this._isUpdating = false;
         }
     },
 
@@ -25731,11 +25751,21 @@ const ScoreDashboard = {
         // 页面加载时更新一次
         this.update();
 
-        // ✅ 关键修复：监听所有可能触发分数变化的事件，使用防抖避免过度更新
-        const events = ['input', 'change'];  // 只监听input和change，移除blur和click
+        // ✅ 关键修复：监听用户输入事件，既触发计算也更新显示
+        const events = ['input', 'change'];
+        
+        // 创建两个防抖函数：一个用于计算，一个用于显示更新
+        const debouncedCalculate = this.debounce(() => {
+            // 触发TPI计算
+            if (typeof window.calculateTPI === 'function') {
+                window.calculateTPI();
+            }
+        }, 300); // 计算使用300ms防抖
+        
         const debouncedUpdate = this.debounce(() => {
-            this.update();
-        }, 500); // 增加防抖延迟到500ms
+            // 更新显示（不触发计算，只读取数据）
+            this.updateDisplay();
+        }, 100); // 显示更新使用100ms防抖
 
         events.forEach(eventType => {
             document.addEventListener(eventType, (e) => {
@@ -25748,8 +25778,10 @@ const ScoreDashboard = {
                     target.type === 'checkbox' ||
                     target.type === 'radio'
                 )) {
-                    // 使用防抖函数
-                    debouncedUpdate();
+                    // 先触发计算
+                    debouncedCalculate();
+                    // 然后更新显示
+                    setTimeout(() => debouncedUpdate(), 350);
                 }
             }, true);
         });
@@ -25757,6 +25789,36 @@ const ScoreDashboard = {
         // 标记为已初始化
         this.initialized = true;
         console.log('[ScoreDashboard] 初始化完成 - 已绑定实时监听（使用防抖）');
+    },
+
+    // 只更新显示，不触发计算
+    updateDisplay: function() {
+        try {
+            // 卡片式分数看板字段：MA7 / AMI / FLI / SYS / BONUS / 总分
+            const ma7Score = this.getScore('ma7-score');
+            const amiScore = this.getScore('ami-score');
+            const fliScore = this.getScore('fli-score');
+            const sysScore = this.getScore('sys-score');
+            const bonusScore = this.getScore('bonus-score');
+
+            // 优先用系统已计算出的 tpi-total；若不存在则用各分项求和兜底
+            let total = this.getScore('tpi-total');
+            const sum = amiScore + fliScore + sysScore + bonusScore;
+            if (!isFinite(total) || total === 0) total = sum;
+
+            // 卡片式分数看板更新
+            this.updateElement('dashboard-ma7', ma7Score.toFixed(1));
+            this.updateElement('dashboard-ami', amiScore.toFixed(1));
+            this.updateElement('dashboard-fli', fliScore.toFixed(1));
+            this.updateElement('dashboard-sys', sysScore.toFixed(1));
+            this.updateElement('dashboard-bonus', bonusScore.toFixed(1));
+            this.updateElement('dashboard-total', total.toFixed(1));
+
+            // 更新评级
+            this.updateRating(total);
+        } catch (error) {
+            console.error('[ScoreDashboard] 显示更新失败:', error);
+        }
     },
 
     // 防抖辅助函数
@@ -25773,29 +25835,29 @@ const ScoreDashboard = {
     },
 
     updateTimer: null,
-    _lastLogTime: 0
+    _lastLogTime: 0,
+    _isUpdating: false
 };
 
 // 页面加载时初始化分数看板
 document.addEventListener('DOMContentLoaded', function() {
     ScoreDashboard.init();
     
-    // ✅ 修复：加载后延迟更新
+    // ✅ 修复：加载后延迟更新（会触发一次计算）
     setTimeout(() => {
         ScoreDashboard.update();
         console.log('[ScoreDashboard] 页面加载后首次更新完成');
     }, 1000);
     
-    // ✅ 修复：大幅降低自动刷新频率从2秒到10秒，减少性能消耗
-    // 并且可以通过变量控制是否启用自动刷新
-    const AUTO_REFRESH_ENABLED = true;  // 设为false可完全禁用自动刷新
-    const AUTO_REFRESH_INTERVAL = 10000; // 10秒
+    // ✅ 修复：定期刷新显示（不触发计算，只更新显示）
+    const AUTO_REFRESH_ENABLED = true;
+    const AUTO_REFRESH_INTERVAL = 5000; // 5秒刷新一次显示
     
     if (AUTO_REFRESH_ENABLED) {
         setInterval(() => {
-            ScoreDashboard.update();
+            ScoreDashboard.updateDisplay(); // 只更新显示，不触发计算
         }, AUTO_REFRESH_INTERVAL);
-        console.log(`[ScoreDashboard] 自动刷新已启用，间隔${AUTO_REFRESH_INTERVAL/1000}秒`);
+        console.log(`[ScoreDashboard] 自动刷新显示已启用，间隔${AUTO_REFRESH_INTERVAL/1000}秒`);
     } else {
         console.log('[ScoreDashboard] 自动刷新已禁用');
     }
