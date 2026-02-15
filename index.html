@@ -25506,29 +25506,60 @@ const ScoreDashboard = {
     // 更新看板显示（顶部置顶看板 + 兼容旧看板）
     update: function() {
         try {
-            // 卡片式分数看板字段：AMI / FLI / BONUS / 总分 / 评级
-            const ma7Score = this.getScore('ma7-score');
-            const amiScore = this.getScore('ami-score');
-            const fliScore = this.getScore('fli-score');
-            const sysScore = this.getScore('sys-score');
-            const bonusScore = this.getScore('bonus-score');
+            // ✅ 关键修复：先触发TPI计算，确保所有分数都是最新的
+            try {
+                if (typeof window.calculateTPI === 'function') {
+                    window.calculateTPI();
+                } else if (window.TPI && typeof window.TPI.calculateTPI === 'function') {
+                    window.TPI.calculateTPI();
+                }
+            } catch (e) {
+                console.warn('[ScoreDashboard] 触发TPI计算失败:', e);
+            }
 
-            // 优先用系统已计算出的 tpi-total；若不存在则用各分项求和兜底
-            let total = this.getScore('tpi-total');
-            const sum = ma7Score + amiScore + fliScore + sysScore + bonusScore;
-            if (!isFinite(total) || total === 0) total = sum;
+            // 等待计算完成后再读取分数（使用setTimeout确保DOM已更新）
+            setTimeout(() => {
+                try {
+                    // 卡片式分数看板字段：MA7 / AMI / FLI / SYS / BONUS / 总分
+                    const ma7Score = this.getScore('ma7-score');
+                    const amiScore = this.getScore('ami-score');
+                    const fliScore = this.getScore('fli-score');
+                    const sysScore = this.getScore('sys-score');
+                    const bonusScore = this.getScore('bonus-score');
 
-            // 卡片式分数看板更新
-            this.updateElement('dashboard-ami', amiScore.toFixed(1));
-            this.updateElement('dashboard-fli', fliScore.toFixed(1));
-            this.updateElement('dashboard-bonus', bonusScore.toFixed(1));
-            this.updateElement('dashboard-total', total.toFixed(1));
+                    // 优先用系统已计算出的 tpi-total；若不存在则用各分项求和兜底
+                    let total = this.getScore('tpi-total');
+                    const sum = amiScore + fliScore + sysScore + bonusScore;
+                    if (!isFinite(total) || total === 0) total = sum;
 
-            // 更新评级
-            this.updateRating(total);
+                    // ✅ 添加调试日志
+                    console.log('[ScoreDashboard] 分数更新:', {
+                        MA7: ma7Score,
+                        AMI: amiScore,
+                        FLI: fliScore,
+                        SYS: sysScore,
+                        BONUS: bonusScore,
+                        总分: total
+                    });
+
+                    // 卡片式分数看板更新
+                    this.updateElement('dashboard-ma7', ma7Score.toFixed(1));
+                    this.updateElement('dashboard-ami', amiScore.toFixed(1));
+                    this.updateElement('dashboard-fli', fliScore.toFixed(1));
+                    this.updateElement('dashboard-sys', sysScore.toFixed(1));
+                    this.updateElement('dashboard-bonus', bonusScore.toFixed(1));
+                    this.updateElement('dashboard-total', total.toFixed(1));
+
+                    // 更新评级
+                    this.updateRating(total);
+
+                } catch (error) {
+                    console.error('[ScoreDashboard] 分数更新失败:', error);
+                }
+            }, 10); // 10ms延迟确保计算完成
 
         } catch (error) {
-            console.error('分数看板更新失败:', error);
+            console.error('[ScoreDashboard] 更新失败:', error);
         }
     },
 
@@ -25544,6 +25575,7 @@ const ScoreDashboard = {
 
     // 更新元素显示
     updateElement: function(elementId, value) {
+        // 方法1: 通过ID更新（旧看板）
         const element = document.getElementById(elementId);
         if (element) {
             element.textContent = value;
@@ -25554,44 +25586,70 @@ const ScoreDashboard = {
                 element.style.transform = 'scale(1)';
             }, 160);
         }
+
+        // ✅ 方法2: 通过data-score属性更新（新顶部看板）
+        // 将 dashboard-xxx 转换为 xxx
+        const scoreType = elementId.replace('dashboard-', '');
+        const scoreElements = document.querySelectorAll(`[data-score="${scoreType}"]`);
+        scoreElements.forEach(el => {
+            el.textContent = value;
+            
+            // 小幅动画
+            el.style.transform = 'scale(1.06)';
+            setTimeout(() => {
+                el.style.transform = 'scale(1)';
+            }, 160);
+        });
     },
 
     // 更新评级显示（与截图格式一致）
     updateRating: function(total) {
         const ratingEl = document.getElementById('dashboard-rating');
-        if (!ratingEl) return;
-
+        const emojiEl = document.getElementById('rating-emoji');
+        
         let text = '';
+        let emoji = '-';
         let bg = 'rgba(148, 163, 184, 0.30)';
         let border = 'rgba(148, 163, 184, 0.35)';
 
         if (total >= 201) {
             text = '≥ 201 过载 (Overload)';
+            emoji = '🔴';
             bg = 'rgba(239, 68, 68, 0.22)';
             border = 'rgba(239, 68, 68, 0.30)';
         } else if (total >= 156) {
             text = '≥ 156 卓越 (Excellence)';
+            emoji = '🟢';
             bg = 'rgba(16, 185, 129, 0.20)';
             border = 'rgba(16, 185, 129, 0.28)';
         } else if (total >= 121) {
             text = '≥ 121 推进 (Steady)';
+            emoji = '🔵';
             bg = 'rgba(59, 130, 246, 0.18)';
             border = 'rgba(59, 130, 246, 0.26)';
         } else if (total >= 95) {
             text = '≥ 95 维持 (Baseline)';
+            emoji = '🟡';
             bg = 'rgba(245, 158, 11, 0.18)';
             border = 'rgba(245, 158, 11, 0.26)';
         } else {
             text = '< 95 维护 (Maintenance)';
+            emoji = '⚪';
         }
 
-        ratingEl.textContent = text;
+        // 更新评级文字（旧看板）
+        if (ratingEl) {
+            ratingEl.textContent = text;
+            try {
+                ratingEl.style.background = bg;
+                ratingEl.style.borderColor = border;
+            } catch (e) {}
+        }
 
-        // 顶部看板为 pill.rating，需要背景/边框；旧看板则只设背景即可
-        try {
-            ratingEl.style.background = bg;
-            ratingEl.style.borderColor = border;
-        } catch (e) {}
+        // ✅ 更新评级表情（新顶部看板）
+        if (emojiEl) {
+            emojiEl.textContent = emoji;
+        }
     },
 
     initialized: false,
@@ -25607,20 +25665,31 @@ const ScoreDashboard = {
         // 页面加载时更新一次
         this.update();
 
-        // 监听输入变化：保持实时刷新
-        document.addEventListener('input', (e) => {
-            clearTimeout(this.updateTimer);
-            this.updateTimer = setTimeout(() => this.update(), 120);
-        });
-
-        document.addEventListener('change', (e) => {
-            clearTimeout(this.updateTimer);
-            this.updateTimer = setTimeout(() => this.update(), 120);
+        // ✅ 关键修复：监听所有可能触发分数变化的事件
+        const events = ['input', 'change', 'blur', 'click'];
+        events.forEach(eventType => {
+            document.addEventListener(eventType, (e) => {
+                // 只对表单控件和按钮响应
+                const target = e.target;
+                if (target && (
+                    target.tagName === 'INPUT' || 
+                    target.tagName === 'TEXTAREA' || 
+                    target.tagName === 'SELECT' ||
+                    target.tagName === 'BUTTON' ||
+                    target.type === 'checkbox' ||
+                    target.type === 'radio'
+                )) {
+                    clearTimeout(this.updateTimer);
+                    this.updateTimer = setTimeout(() => {
+                        this.update();
+                    }, 100); // 降低延迟从120ms到100ms
+                }
+            }, true); // 使用捕获阶段确保不会错过事件
         });
 
         // 标记为已初始化
         this.initialized = true;
-        console.log('[ScoreDashboard] 初始化完成');
+        console.log('[ScoreDashboard] 初始化完成 - 已绑定实时监听');
     },
 
     updateTimer: null
@@ -25630,10 +25699,16 @@ const ScoreDashboard = {
 document.addEventListener('DOMContentLoaded', function() {
     ScoreDashboard.init();
     
-    // 每隔5秒自动刷新一次(备用机制)
+    // ✅ 修复：加载后立即更新一次
+    setTimeout(() => {
+        ScoreDashboard.update();
+        console.log('[ScoreDashboard] 页面加载后首次更新完成');
+    }, 500);
+    
+    // ✅ 修复：缩短自动刷新间隔从5秒到2秒
     setInterval(() => {
         ScoreDashboard.update();
-    }, 5000);
+    }, 2000);
 });
 
 // ═══════════════════════════════════════════════════════════════════
