@@ -30495,17 +30495,31 @@ console.log('✅ [TPI优化] 函数增强包装器已加载');
                 }
             });
             
-            // 更新评级
+            // 更新评级 - 优先读取下拉框，其次根据分数自动计算
             const ratingEmoji = dashboard.querySelector('#rating-emoji');
             if (ratingEmoji) {
-                const total = scores.total;
-                let rating = '';
-                if (total >= 201) rating = '🔥'; // Overload
-                else if (total >= 156) rating = 'S'; // Excellence
-                else if (total >= 121) rating = 'A'; // Steady
-                else if (total >= 95) rating = 'B';  // Baseline
-                else if (total > 0) rating = 'D';  // Maintenance
-                else rating = '-';  // 无数据时显示横线
+                const ratingSelect = document.getElementById('tpi-rating');
+                let rating = '-';
+                
+                // 优先使用下拉框选择的评级
+                if (ratingSelect && ratingSelect.value) {
+                    const ratingMap = {
+                        'poor': '🔻',        // Maintenance
+                        'normal': '➖',      // Baseline
+                        'good': '📈',        // Steady
+                        'excellent': '⭐',  // Excellence
+                        'overload': '🔥'    // Overload
+                    };
+                    rating = ratingMap[ratingSelect.value] || '-';
+                } else {
+                    // 如果下拉框未选择，根据分数自动计算
+                    const total = scores.total;
+                    if (total >= 201) rating = '🔥';
+                    else if (total >= 156) rating = '⭐';
+                    else if (total >= 121) rating = '📈';
+                    else if (total >= 95) rating = '➖';
+                    else if (total > 0) rating = '🔻';
+                }
                 
                 ratingEmoji.textContent = rating;
             }
@@ -30524,7 +30538,8 @@ console.log('✅ [TPI优化] 函数增强包装器已加载');
             'fli-score',
             'sys-score',
             'bonus-score',
-            'tpi-total'
+            'tpi-total',
+            'tpi-rating'  // 添加评级下拉框
         ];
         
         scoreInputs.forEach(id => {
