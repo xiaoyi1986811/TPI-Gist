@@ -74,24 +74,132 @@
 
 
 /* =========================================================
-   V6 Final Stability Patch - Storage Safe Access (2026-02-11)
-   - 仅提供辅助函数，不改写 localStorage 原型/方法
-   - 用于在 iOS Safari 无痕/隐私模式下避免 QuotaExceededError/安全异常导致脚本中断
+   Storage Safe Access — IndexedDB 主存储 + localStorage 同步缓存
+   策略：
+     · IndexedDB (TPI_LSMirror) 为主持久化层（容量大、Safari 无痕也可用）
+     · localStorage 作为同步缓存，供同步代码直接读取
+     · 写入时同步写 localStorage、异步写 IndexedDB（fire-and-forget）
+     · 读取时优先内存缓存（IndexedDB 预载）→ 回退 localStorage
+     · iOS Safari / Firefox 私有模式下安全降级，不中断脚本
+   版本：2026-02 (Git驱动版)
 ========================================================= */
 (function(){
+  'use strict';
+
+  /* ── 工具 ── */
   function _warn(op, key, e){
-    try{ console.warn(`[Storage] ${op}${key ? ' ' + key : ''} 失败:`, e); }catch(_){}
+    try{ console.warn('[Storage]', op, key||'', e); }catch(_){}
   }
-
   function _getLS(){
-    try{ return localStorage; }catch(e){ _warn('访问 localStorage', '', e); return null; }
+    try{ return localStorage; }catch(e){ _warn('访问localStorage', '', e); return null; }
   }
 
+  /* ── IndexedDB 镜像层 ── */
+  var _IDB_NAME  = 'TPI_LSMirror';
+  var _IDB_STORE = 'kv';
+  var _idb       = null;
+
+  function _openDB(){
+    if (_idb) return Promise.resolve(_idb);
+    return new Promise(function(resolve, reject){
+      try{
+        var req = indexedDB.open(_IDB_NAME, 1);
+        req.onupgradeneeded = function(){
+          try{ req.result.createObjectStore(_IDB_STORE, {keyPath:'k'}); }catch(e){}
+        };
+        req.onsuccess = function(){ _idb = req.result; resolve(_idb); };
+        req.onerror   = function(){ reject(req.error); };
+      }catch(e){ reject(e); }
+    });
+  }
+
+  /* ── 内存缓存（IndexedDB 预载，供同步读取） ── */
+  var _mem      = {};
+  var _memReady = false;
+
+  function _preload(){
+    _openDB().then(function(db){
+      try{
+        var tx  = db.transaction([_IDB_STORE],'readonly');
+        var req = tx.objectStore(_IDB_STORE).getAll();
+        req.onsuccess = function(){
+          try{
+            (req.result||[]).forEach(function(r){ if(r&&r.k) _mem[r.k]=r.v; });
+            _memReady = true;
+            console.log('[Storage] IndexedDB预载完成，共', Object.keys(_mem).length, '条');
+          }catch(e){}
+        };
+      }catch(e){ _memReady=true; }
+    }).catch(function(){ _memReady=true; });
+  }
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded', _preload, {once:true});
+  }else{
+    setTimeout(_preload, 0);
+  }
+
+  /* ── IndexedDB 写/删/清 ── */
+  function _idbSet(k, v){
+    _mem[k] = v;
+    _openDB().then(function(db){
+      try{
+        var tx = db.transaction([_IDB_STORE],'readwrite');
+        tx.objectStore(_IDB_STORE).put({k:k, v:v, ts:Date.now()});
+      }catch(e){}
+    }).catch(function(){});
+  }
+  function _idbDel(k){
+    delete _mem[k];
+    _openDB().then(function(db){
+      try{
+        var tx = db.transaction([_IDB_STORE],'readwrite');
+        tx.objectStore(_IDB_STORE).delete(k);
+      }catch(e){}
+    }).catch(function(){});
+  }
+  function _idbClear(){
+    Object.keys(_mem).forEach(function(k){ delete _mem[k]; });
+    _openDB().then(function(db){
+      try{
+        var tx = db.transaction([_IDB_STORE],'readwrite');
+        tx.objectStore(_IDB_STORE).clear();
+      }catch(e){}
+    }).catch(function(){});
+  }
+
+  /* ── 公开异步读取（可选使用） ── */
+  window.__tpi_idb_get_async = function(key){
+    if(_memReady && Object.prototype.hasOwnProperty.call(_mem,key)){
+      return Promise.resolve(_mem[key]!==undefined ? _mem[key] : null);
+    }
+    return _openDB().then(function(db){
+      return new Promise(function(resolve, reject){
+        try{
+          var tx  = db.transaction([_IDB_STORE],'readonly');
+          var req = tx.objectStore(_IDB_STORE).get(key);
+          req.onsuccess = function(){
+            var v = req.result ? req.result.v : null;
+            if(v!==null) _mem[key]=v;
+            resolve(v);
+          };
+          req.onerror = function(){ reject(req.error); };
+        }catch(e){ reject(e); }
+      });
+    }).catch(function(){ return null; });
+  };
+
+  /* ── 统一公开接口（兼容全站所有 __tpi_ls_* 调用） ── */
   window.__tpi_ls_get = function(key, defaultValue){
+    // 优先内存缓存（IndexedDB预载）
+    if(_memReady && Object.prototype.hasOwnProperty.call(_mem,key)){
+      var cv = _mem[key];
+      return (cv!==null && cv!==undefined) ? cv : (defaultValue===undefined ? null : defaultValue);
+    }
+    // 回退 localStorage
     try{
-      const ls = _getLS(); if(!ls) return (defaultValue===undefined?null:defaultValue);
-      const v = ls.getItem(key);
-      return (v === null || v === undefined) ? (defaultValue===undefined?null:defaultValue) : v;
+      var ls = _getLS(); if(!ls) return (defaultValue===undefined?null:defaultValue);
+      var v  = ls.getItem(key);
+      return (v===null||v===undefined) ? (defaultValue===undefined?null:defaultValue) : v;
     }catch(e){
       _warn('读取', key, e);
       return (defaultValue===undefined?null:defaultValue);
@@ -99,24 +207,27 @@
   };
 
   window.__tpi_ls_set = function(key, value){
+    _idbSet(key, value);          // 主存储（IndexedDB + 内存缓存）
     try{
-      const ls = _getLS(); if(!ls) return false;
-      ls.setItem(key, value);
+      var ls = _getLS(); if(!ls) return false;
+      ls.setItem(key, value);     // 同步缓存（localStorage）
       return true;
     }catch(e){ _warn('写入', key, e); return false; }
   };
 
   window.__tpi_ls_remove = function(key){
+    _idbDel(key);
     try{
-      const ls = _getLS(); if(!ls) return false;
+      var ls = _getLS(); if(!ls) return false;
       ls.removeItem(key);
       return true;
     }catch(e){ _warn('删除', key, e); return false; }
   };
 
   window.__tpi_ls_clear = function(){
+    _idbClear();
     try{
-      const ls = _getLS(); if(!ls) return false;
+      var ls = _getLS(); if(!ls) return false;
       ls.clear();
       return true;
     }catch(e){ _warn('清空', '', e); return false; }
@@ -124,23 +235,51 @@
 
   window.__tpi_ls_length = function(defaultValue){
     try{
-      const ls = _getLS(); if(!ls) return defaultValue===undefined?0:defaultValue;
+      var ls = _getLS(); if(!ls) return defaultValue===undefined?0:defaultValue;
       return ls.length;
-    }catch(e){ _warn('读取 length', '', e); return defaultValue===undefined?0:defaultValue; }
+    }catch(e){ return defaultValue===undefined?0:defaultValue; }
   };
 
   window.__tpi_ls_key = function(i, defaultValue){
     try{
-      const ls = _getLS(); if(!ls) return defaultValue===undefined?null:defaultValue;
+      var ls = _getLS(); if(!ls) return defaultValue===undefined?null:defaultValue;
       return ls.key(i);
-    }catch(e){ _warn('读取 key()', '', e); return defaultValue===undefined?null:defaultValue; }
+    }catch(e){ return defaultValue===undefined?null:defaultValue; }
   };
 
-  // 用于安全遍历（隐私模式下 localStorage 访问会抛错）
   window.__tpi_ls_obj = function(){
-    const ls = _getLS();
+    var ls = _getLS();
     return ls || {};
   };
+
+  
+  // ── HTML Sanitizer (XSS Prevention) ──
+  window.__tpi_sanitize_html = function(str) {
+    if (typeof str !== 'string') return String(str || '');
+    var div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  };
+  // ── 统一调试日志封装（生产环境静默，不删除有意义日志）──
+  (function() {
+    if (typeof window.__tpi_debug_log === 'function') return;
+    var _debug = (function() {
+      try { return !!localStorage.getItem('__tpi_debug__'); } catch(e) { return false; }
+    })();
+    window.__tpi_debug_log = function() {
+      if (_debug && typeof console !== 'undefined' && console.log) {
+        try { console.log.apply(console, arguments); } catch(e) {}
+      }
+    };
+    window.__tpi_debug_enable = function() {
+      try { localStorage.setItem('__tpi_debug__', '1'); _debug = true; } catch(e) {}
+    };
+    window.__tpi_debug_disable = function() {
+      try { localStorage.removeItem('__tpi_debug__'); _debug = false; } catch(e) {}
+    };
+  })();
+
+console.log('[Storage] IndexedDB+localStorage 双层存储已初始化 (Git驱动版)');
 })();
 </script>
 
@@ -793,7 +932,8 @@ function __tpi_collectViewState() {
     }
 
     // ✅ 排除顶部看板/同步状态：这些必须始终动态生成，不能被快照“锁死”
-    if (id.startsWith('ts-') || id.startsWith('sync-status')) {
+    // ✅ [Fix] 额外排除 score-dashboard / rating-emoji（防textContent覆盖破坏看板结构）
+    if (id.startsWith('ts-') || id.startsWith('sync-status') || id.startsWith('score-dashboard') || id === 'rating-emoji') {
       return;
     }
 
@@ -900,7 +1040,8 @@ function __tpi_restoreViewState(viewState) {
     }
 
     // ✅ 排除顶部看板/同步状态：这些必须始终动态生成，不能被快照“锁死”
-    if ((el.id || '').startsWith('ts-') || (el.id || '').startsWith('sync-status')) {
+    // ✅ [Fix] 额外排除 score-dashboard / rating-emoji（防textContent覆盖破坏看板结构）
+    if ((el.id || '').startsWith('ts-') || (el.id || '').startsWith('sync-status') || (el.id || '').startsWith('score-dashboard') || (el.id || '') === 'rating-emoji') {
       return;
     }
 
@@ -923,6 +1064,12 @@ function __tpi_triggerRecalc() {
   } catch (e) {
     console.warn('[__tpi_triggerRecalc] TPI计算失败:', e);
   }
+  // ✅ 计算完成后同步刷新顶部分数看板
+  try {
+    if (window.ScoreDashboard && typeof window.ScoreDashboard.update === 'function') {
+      setTimeout(function(){ try{ window.ScoreDashboard.update(); }catch(e){} }, 150);
+    }
+  } catch(e) {}
 }
 
 
@@ -1667,7 +1814,7 @@ window.exportAsMarkdown = function () {
 <!-- 安全增强元标签 -->
 <meta content="nosniff" http-equiv="X-Content-Type-Options"/>
 <meta content="1; mode=block" http-equiv="X-XSS-Protection"/>
-<meta content="strict-origin-when-cross-origin" name="referrer"/>
+<meta content="strict-origin-when-cross-origin" http-equiv="Referrer-Policy"/>
 <!-- Netlify部署优化 -->
 <meta content="tpi-system" name="netlify-deploy"/>
 <link href="https://mytpi.netlify.app/" rel="canonical"/>
@@ -1962,7 +2109,7 @@ window.exportAsMarkdown = function () {
                 align-items: center;
                 gap: 4px;
             `;
-            errorDiv.innerHTML = `<span>⚠️</span><span>${message}</span>`;
+            errorDiv.innerHTML = `<span>⚠️</span><span>${(typeof window.__tpi_sanitize_html === "function" ? window.__tpi_sanitize_html(message) : message)}</span>`;
 
             input.parentNode.insertBefore(errorDiv, input.nextSibling);
 
@@ -3878,7 +4025,7 @@ console.log('✅ window.InputValidator.showToast:', typeof window.InputValidator
     }
 
     // 定期检查并移除错误遮罩(移动端修复)
-    setInterval(removeErrorOverlays, 5000);
+    window.__TPI_ERROR_OVERLAY_TIMER__ = window.__TPI_ERROR_OVERLAY_TIMER__ || setInterval(removeErrorOverlays, 5000);
 
     console.log('✅ 全局错误处理已启用');
 })();
@@ -4893,7 +5040,6 @@ window.exportAsCSV = function() {
 <a class="quick-nav-btn-v19" href="#daily-review" data-target="daily-review">📝 每日复盘与交接</a>
 <a class="quick-nav-btn-v19" href="#data-analytics" data-target="data-analytics">📈 数据分析与可视化</a>
 <a class="quick-nav-btn-v19" href="#data-processing" data-target="data-processing">🛠️ 数据工坊</a>
-</div>
 </div>
 </div>
 <button class="quick-nav-toggle-第18版" id="navToggleV17" onclick="toggleQuickNavV17()" title="显示/隐藏导航栏">
@@ -6658,10 +6804,10 @@ window.exportAsCSV = function() {
 <label style="display: block; margin-bottom: 8px; font-weight: 600;">
            PushPlus Token
           </label>
-<input id="radar-push-token" placeholder="请输入您的PushPlus Token" style="width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px;" type="text"/>
+<input id="radar-push-token" placeholder="请输入您的PushPlus Token" style="width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px;" type="password"/>
 <p style="margin-top: 8px; font-size: 12px; color: #6b7280;">
            📌 如何获取Token: 访问
-           <a href="https://www.pushplus.plus/" style="color: #3b82f6;" target="_blank">
+           <a href="https://www.pushplus.plus/" style="color: #3b82f6;" target="_blank" rel="noopener noreferrer">
             pushplus.plus
            </a>
            注册并获取您的专属Token
@@ -20297,8 +20443,31 @@ ${reflection}
                 function updateNetworkStatus() {
                     if (navigator.onLine) {
                         indicator.style.display = 'none';
+                        // 网络恢复：启用云端同步按钮
+                        try {
+                            document.querySelectorAll('[onclick*="gistSave"],[onclick*="gistLoad"],[onclick*="gistUpload"],[onclick*="gistDownload"],[onclick*="tpiSaveToday"],[onclick*="tpiLoadToday"]').forEach(function(btn) {
+                                if (btn.dataset.offlineDisabled) {
+                                    btn.disabled = false;
+                                    btn.title = btn._origTitle || '';
+                                    btn.style.opacity = '';
+                                    btn.style.cursor = '';
+                                    delete btn.dataset.offlineDisabled;
+                                }
+                            });
+                        } catch(e) {}
                     } else {
                         indicator.style.display = 'flex';
+                        // 离线：禁用云端同步按钮
+                        try {
+                            document.querySelectorAll('[onclick*="gistSave"],[onclick*="gistLoad"],[onclick*="gistUpload"],[onclick*="gistDownload"],[onclick*="tpiSaveToday"],[onclick*="tpiLoadToday"]').forEach(function(btn) {
+                                btn.disabled = true;
+                                btn.dataset.offlineDisabled = '1';
+                                btn._origTitle = btn.title || '';
+                                btn.title = '⚠️ 当前处于离线状态，无法同步';
+                                btn.style.opacity = '0.5';
+                                btn.style.cursor = 'not-allowed';
+                            });
+                        } catch(e) {}
                     }
                 }
 
@@ -22692,7 +22861,7 @@ window.addEventListener('resize', function() {
                         <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 24px;background:#f8fafc;border-bottom:1px solid #e2e8f0;flex-shrink:0;">
                             <h3 style="margin:0;font-size:18px;color:#1e293b;">👁️ 报告预览</h3>
                             <div style="display:flex;gap:10px;">
-                                <button onclick="(function(){var p=document.getElementById('tpi-preview-body');if(p){var w=window.open('','_blank');if(w){w.document.write('<html><head><meta charset=UTF-8><title>TPI报告预览</title><style>body{font-family:Arial,sans-serif;max-width:900px;margin:40px auto;padding:20px;}h2{color:#2563eb;}table{width:100%;border-collapse:collapse;margin:20px 0;}th,td{padding:10px;border:1px solid #e5e7eb;}th{background:#f3f4f6;}.btn{padding:10px 20px;margin:10px 5px;cursor:pointer;border:1px solid #ccc;border-radius:6px;background:#fff;}</style></head><body>'+p.innerHTML+'<div style=text-align:center;margin-top:30px><button class=btn onclick=window.print()>🖨️ 打印</button><button class=btn onclick=window.close()>关闭</button></div></body></html>');w.document.close();}}})()" style="padding:6px 14px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;color:#334155;transition:all 0.15s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='#fff'">🌐 新窗口打开</button>
+                                <button onclick="(function(){var p=document.getElementById('tpi-preview-body');if(p){var w=window.open('','_blank');if(w){w.document.write('<html><head><meta charset="UTF-8"><title>TPI报告预览</title><style>body{font-family:Arial,sans-serif;max-width:900px;margin:40px auto;padding:20px;}h2{color:#2563eb;}table{width:100%;border-collapse:collapse;margin:20px 0;}th,td{padding:10px;border:1px solid #e5e7eb;}th{background:#f3f4f6;}.btn{padding:10px 20px;margin:10px 5px;cursor:pointer;border:1px solid #ccc;border-radius:6px;background:#fff;}</style></head><body>'+p.innerHTML+'<div style=text-align:center;margin-top:30px><button class=btn onclick=window.print()>🖨️ 打印</button><button class=btn onclick=window.close()>关闭</button></div></body></html>');w.document.close();}}})()" style="padding:6px 14px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;color:#334155;transition:all 0.15s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='#fff'">🌐 新窗口打开</button>
                                 <button onclick="document.getElementById('tpi-preview-modal').remove()" style="padding:6px 14px;border:none;border-radius:6px;background:#ef4444;color:#fff;cursor:pointer;font-size:13px;font-weight:600;transition:background 0.15s;" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">✕ 关闭</button>
                             </div>
                         </div>
@@ -25854,7 +26023,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const AUTO_REFRESH_INTERVAL = 5000; // 5秒刷新一次显示
     
     if (AUTO_REFRESH_ENABLED) {
-        setInterval(() => {
+        window.__TPI_SCORE_DISPLAY_TIMER__ = window.__TPI_SCORE_DISPLAY_TIMER__ || setInterval(() => {
             ScoreDashboard.updateDisplay(); // 只更新显示，不触发计算
         }, AUTO_REFRESH_INTERVAL);
         console.log(`[ScoreDashboard] 自动刷新显示已启用，间隔${AUTO_REFRESH_INTERVAL/1000}秒`);
@@ -29667,7 +29836,7 @@ try{
     });
 
     // ===== 修复4: 定期自动刷新看板（备用机制） =====
-    setInterval(() => {
+    window.__TPI_BOARD_REFRESH_TIMER__ = window.__TPI_BOARD_REFRESH_TIMER__ || setInterval(() => {
         if (window.ScoreDashboard && window.ScoreDashboard.update) {
             window.ScoreDashboard.update();
         }
@@ -29766,8 +29935,6 @@ try{
 <!-- ========== 未来事件雷达渲染修复补丁 v1.0 ========== -->
 <!-- 解决：下载后计数正常但列表空白，增强渲染稳定性 -->
 
-</body>
-</html>
 
 <script>
 // 使用固定 Gist ID: cab132a91b77c44ff7a66286a54c213d
@@ -31186,7 +31353,7 @@ console.log('✅ [TPI优化] 函数增强包装器已加载');
         });
         
         // 定期更新（每2秒）
-        setInterval(updateScoreDashboard, 2000);
+        window.__TPI_SCORE_SYNC_TIMER__ = window.__TPI_SCORE_SYNC_TIMER__ || setInterval(updateScoreDashboard, 2000);
     }
     
     // 初始化
@@ -31222,6 +31389,391 @@ console.log('✅ [TPI优化] 函数增强包装器已加载');
     
 })();
 
+</script>
+
+<!-- ★★★ Git驱动版：快照同步系统 (IndexedDB专属存储 + Gist云端通道) ★★★ -->
+<script>
+(function(){
+'use strict';
+
+/* ============================================================
+   TPI Snapshot System — Git驱动版
+   · 快照数据存入专属 IndexedDB (TPI_Snapshots)，独立于主存储
+   · 同时在 localStorage 保留元数据索引，降级时可查
+   · 恢复时强制触发重算，确保分数/评级实时刷新
+   · 支持云端通道：每次创建快照后静默推送 Gist（不阻塞）
+   · 暴露 window.TPISnapshotSystem，供按钮/自动调用
+============================================================ */
+
+/* ── IndexedDB (快照专属库) ── */
+var _SDB_NAME  = 'TPI_Snapshots';
+var _SDB_STORE = 'snaps';
+var _sdb       = null;
+
+function _openSnapDB(){
+  if(_sdb) return Promise.resolve(_sdb);
+  return new Promise(function(resolve, reject){
+    try{
+      var req = indexedDB.open(_SDB_NAME, 1);
+      req.onupgradeneeded = function(){
+        try{
+          var db = req.result;
+          if(!db.objectStoreNames.contains(_SDB_STORE)){
+            var st = db.createObjectStore(_SDB_STORE, {keyPath:'id'});
+            st.createIndex('byDate','date',{unique:false});
+          }
+        }catch(e){}
+      };
+      req.onsuccess = function(){ _sdb = req.result; resolve(_sdb); };
+      req.onerror   = function(){ reject(req.error); };
+    }catch(e){ reject(e); }
+  });
+}
+
+/* ── 工具函数 ── */
+function _today(){
+  try{
+    var di = document.getElementById('date-input');
+    if(di && di.value) return di.value;
+  }catch(e){}
+  var d = new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+function _checksum(obj){
+  try{
+    var s = JSON.stringify(obj); var h = 0;
+    for(var i=0;i<s.length;i++) h = (Math.imul(31,h)+s.charCodeAt(i))|0;
+    return (h>>>0).toString(16).padStart(8,'0');
+  }catch(e){ return 'err'; }
+}
+
+function _collectData(){
+  // 先强制重算，确保分数已写入DOM
+  try{ if(typeof window.__tpi_triggerRecalc==='function') window.__tpi_triggerRecalc(); }catch(e){}
+  // 等80ms让异步更新完成（内部通过await调用）
+  // 收集：优先 collectDailyData，回退 collectFormData
+  try{
+    if(typeof window.collectDailyData==='function'){
+      var obj = window.collectDailyData();
+      if(obj){ var k=Object.keys(obj)[0]; if(k) return obj[k]; }
+    }
+  }catch(e){}
+  try{
+    if(typeof window.collectFormData==='function') return window.collectFormData();
+  }catch(e){}
+  return null;
+}
+
+function _restoreUI(data){
+  try{
+    if(typeof window.restoreUIFromData==='function'){ window.restoreUIFromData(data); return; }
+    if(typeof window.restoreFormData==='function'){ window.restoreFormData(data); return; }
+  }catch(e){}
+}
+
+function _triggerRecalcAfterRestore(){
+  setTimeout(function(){
+    try{ if(typeof window.__tpi_triggerRecalc==='function') window.__tpi_triggerRecalc(); }catch(e){}
+    try{ if(typeof window.TPI!=='undefined' && typeof window.TPI.calculateSystem==='function') window.TPI.calculateSystem(); }catch(e){}
+  }, 150);
+}
+
+/* ── IndexedDB CRUD ── */
+function _idbSave(snap){
+  return _openSnapDB().then(function(db){
+    return new Promise(function(res,rej){
+      try{
+        var tx = db.transaction([_SDB_STORE],'readwrite');
+        tx.objectStore(_SDB_STORE).put(snap);
+        tx.oncomplete = res; tx.onerror = function(){ rej(tx.error); };
+      }catch(e){ rej(e); }
+    });
+  });
+}
+
+function _idbList(date){
+  return _openSnapDB().then(function(db){
+    return new Promise(function(res,rej){
+      try{
+        var tx  = db.transaction([_SDB_STORE],'readonly');
+        var idx = tx.objectStore(_SDB_STORE).index('byDate');
+        var req = idx.getAll(date);
+        req.onsuccess = function(){ res(req.result||[]); };
+        req.onerror   = function(){ rej(req.error); };
+      }catch(e){ rej(e); }
+    });
+  }).catch(function(){ return []; });
+}
+
+function _idbGet(id){
+  return _openSnapDB().then(function(db){
+    return new Promise(function(res,rej){
+      try{
+        var tx  = db.transaction([_SDB_STORE],'readonly');
+        var req = tx.objectStore(_SDB_STORE).get(id);
+        req.onsuccess = function(){ res(req.result||null); };
+        req.onerror   = function(){ rej(req.error); };
+      }catch(e){ rej(e); }
+    });
+  }).catch(function(){ return null; });
+}
+
+function _idbDel(id){
+  return _openSnapDB().then(function(db){
+    return new Promise(function(res,rej){
+      try{
+        var tx = db.transaction([_SDB_STORE],'readwrite');
+        tx.objectStore(_SDB_STORE).delete(id);
+        tx.oncomplete = res; tx.onerror = function(){ rej(tx.error); };
+      }catch(e){ rej(e); }
+    });
+  }).catch(function(){});
+}
+
+/* ── 快照管理器主体 ── */
+window.TPISnapshotSystem = {
+
+  maxSnapshots: 20,
+
+  /* 创建快照 */
+  createSnapshot: async function(description){
+    description = description || '手动快照';
+    try{
+      // 强制重算 + 等待
+      try{ if(typeof window.__tpi_triggerRecalc==='function') window.__tpi_triggerRecalc(); }catch(e){}
+      await new Promise(function(r){ setTimeout(r, 80); });
+
+      var data = _collectData();
+      if(!data){ console.warn('[Snapshot] 无法收集数据'); return {success:false,error:'无法收集数据'}; }
+
+      var date = _today();
+      var snap = {
+        id:          'snap_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
+        date:        date,
+        timestamp:   new Date().toISOString(),
+        description: description,
+        checksum:    _checksum(data),
+        data:        data
+      };
+
+      // 1. 写 IndexedDB（主存储）
+      await _idbSave(snap);
+
+      // 2. 写 localStorage 元数据索引（降级读取用）
+      try{
+        var lsKey  = 'tpi_snapshots_'+date;
+        var lsMeta = JSON.parse(window.__tpi_ls_get(lsKey)||'[]');
+        lsMeta.unshift({id:snap.id, timestamp:snap.timestamp, description:snap.description, checksum:snap.checksum});
+        if(lsMeta.length>this.maxSnapshots) lsMeta=lsMeta.slice(0,this.maxSnapshots);
+        window.__tpi_ls_set(lsKey, JSON.stringify(lsMeta));
+        // 快照数据本身也写 localStorage（通过__tpi_ls_set已同时写IndexedDB主镜像）
+        window.__tpi_ls_set('tpi_snap_data_'+snap.id, JSON.stringify(snap.data));
+      }catch(e){ console.warn('[Snapshot] localStorage索引写入失败:', e); }
+
+      // 3. 清理旧快照（IndexedDB）
+      await this._pruneOld(date);
+
+      // 4. 静默推送 Gist（不阻塞，失败不报错）
+      try{
+        if(typeof window.tpiSaveToday==='function') window.tpiSaveToday().catch(function(){});
+      }catch(e){}
+
+      console.log('[Snapshot] 创建成功:', snap.id);
+      this._toast('📸 快照已保存', 'success');
+      return {success:true, snapshot:snap};
+
+    }catch(err){
+      console.error('[Snapshot] 创建失败:', err);
+      this._toast('❌ 快照创建失败: '+err.message, 'error');
+      return {success:false, error:err.message};
+    }
+  },
+
+  /* 列出某日快照 */
+  listSnapshots: async function(date){
+    date = date || _today();
+    try{
+      var list = await _idbList(date);
+      if(list.length>0) return list.sort(function(a,b){ return b.timestamp.localeCompare(a.timestamp); });
+    }catch(e){}
+    // 降级：localStorage元数据
+    try{
+      var raw = window.__tpi_ls_get('tpi_snapshots_'+date);
+      return raw ? JSON.parse(raw) : [];
+    }catch(e){ return []; }
+  },
+
+  /* 恢复快照 */
+  restoreSnapshot: async function(snapId){
+    try{
+      var snap = await _idbGet(snapId);
+      var data = snap ? snap.data : null;
+      // 降级：localStorage
+      if(!data){
+        try{
+          var raw = window.__tpi_ls_get('tpi_snap_data_'+snapId);
+          if(raw) data = JSON.parse(raw);
+        }catch(e){}
+      }
+      if(!data){ alert('❌ 快照数据不存在'); return false; }
+
+      _restoreUI(data);
+      _triggerRecalcAfterRestore();
+
+      console.log('[Snapshot] 恢复成功:', snapId);
+      this._toast('✅ 快照已恢复', 'success');
+      return true;
+    }catch(err){
+      console.error('[Snapshot] 恢复失败:', err);
+      alert('❌ 快照恢复失败: '+err.message);
+      return false;
+    }
+  },
+
+  /* 删除快照 */
+  deleteSnapshot: async function(snapId){
+    try{
+      await _idbDel(snapId);
+      try{
+        window.__tpi_ls_remove('tpi_snap_data_'+snapId);
+        // 从元数据列表移除
+        var date = _today();
+        var lsKey = 'tpi_snapshots_'+date;
+        var list  = JSON.parse(window.__tpi_ls_get(lsKey)||'[]');
+        window.__tpi_ls_set(lsKey, JSON.stringify(list.filter(function(s){ return s.id!==snapId; })));
+      }catch(e){}
+      return true;
+    }catch(e){ return false; }
+  },
+
+  /* 自动快照（云端上传前调用） */
+  autoSnapshot: async function(){
+    return this.createSnapshot('自动快照-上传前');
+  },
+
+  /* 清理旧快照（保留最新N条） */
+  _pruneOld: async function(date){
+    try{
+      var list = await _idbList(date);
+      list.sort(function(a,b){ return b.timestamp.localeCompare(a.timestamp); });
+      var del  = list.slice(this.maxSnapshots);
+      for(var i=0;i<del.length;i++) await _idbDel(del[i].id);
+    }catch(e){}
+  },
+
+  /* 通知提示（兼容多种 toast 实现） */
+  _toast: function(msg, type){
+    try{
+      var fn = window.tpiToast||window.toast||window.TPIToast;
+      if(fn && typeof fn==='function'){ fn(msg, type||'info'); return; }
+      if(fn && typeof fn.success==='function'){
+        type==='error' ? fn.error(msg) : fn.success(msg); return;
+      }
+    }catch(e){}
+    // 最后兜底：短暂横幅
+    try{
+      var b = document.createElement('div');
+      b.textContent = msg;
+      b.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:999999;'
+        +'background:'+(type==='error'?'#ef4444':'#10b981')+';color:#fff;padding:10px 20px;'
+        +'border-radius:8px;font-size:14px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.2);';
+      document.body.appendChild(b);
+      setTimeout(function(){ try{ b.remove(); }catch(e){} }, 2500);
+    }catch(e){}
+  },
+
+  /* 显示管理界面 */
+  showSnapshotManager: async function(){
+    try{
+      var date  = _today();
+      var snaps = await this.listSnapshots(date);
+      var self  = this;
+
+      var rows = snaps.length>0 ? snaps.map(function(s){
+        return '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid #e2e8f0;'
+          +'border-radius:10px;margin-bottom:8px;">'
+          +'<div style="flex:1;min-width:0;">'
+          +'<div style="font-weight:600;font-size:13px;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+(s.description||'快照')+'</div>'
+          +'<div style="font-size:11px;color:#94a3b8;margin-top:2px;">'+new Date(s.timestamp).toLocaleString('zh-CN')+' · '+((s.checksum||'').slice(0,8))+'</div>'
+          +'</div>'
+          +'<button onclick="TPISnapshotSystem.restoreSnapshot(\''+s.id+'\').then(function(){var m=document.getElementById(\'_tpi_snap_modal\');if(m)m.remove();})" '
+          +'style="padding:5px 12px;background:#3b82f6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;">恢复</button>'
+          +'<button onclick="if(confirm(\'确定删除此快照？\'))TPISnapshotSystem.deleteSnapshot(\''+s.id+'\').then(function(){TPISnapshotSystem.showSnapshotManager();});" '
+          +'style="padding:5px 10px;background:#fee2e2;color:#ef4444;border:none;border-radius:6px;cursor:pointer;font-size:12px;white-space:nowrap;">删除</button>'
+          +'</div>';
+      }).join('')
+      : '<p style="text-align:center;color:#94a3b8;padding:24px 0;font-size:14px;">暂无快照</p>';
+
+      var old = document.getElementById('_tpi_snap_modal');
+      if(old) old.remove();
+
+      var m = document.createElement('div');
+      m.id = '_tpi_snap_modal';
+      m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999999;'
+        +'display:flex;align-items:center;justify-content:center;padding:16px;';
+      m.innerHTML = '<div style="background:#fff;border-radius:16px;width:100%;max-width:500px;max-height:80vh;'
+        +'display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25);">'
+        +'<div style="padding:16px 20px;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center;">'
+        +'<h3 style="margin:0;font-size:16px;font-weight:700;color:#1e293b;">📸 快照管理 · '+date+'</h3>'
+        +'<button onclick="document.getElementById(\'_tpi_snap_modal\').remove()" '
+        +'style="background:none;border:none;font-size:20px;cursor:pointer;color:#94a3b8;line-height:1;">✕</button>'
+        +'</div>'
+        +'<div style="overflow-y:auto;flex:1;padding:16px 20px;">'+rows+'</div>'
+        +'<div style="padding:12px 20px;border-top:1px solid #f1f5f9;display:flex;gap:8px;">'
+        +'<button onclick="var d=prompt(\'快照描述（可选）:\');TPISnapshotSystem.createSnapshot(d||\'手动快照\').then(function(){TPISnapshotSystem.showSnapshotManager();});" '
+        +'style="flex:1;padding:9px;background:linear-gradient(135deg,#8b5cf6,#6d28d9);color:#fff;border:none;'
+        +'border-radius:8px;cursor:pointer;font-weight:700;font-size:13px;">📸 新建快照</button>'
+        +'<button onclick="document.getElementById(\'_tpi_snap_modal\').remove()" '
+        +'style="padding:9px 16px;background:#f1f5f9;color:#475569;border:none;border-radius:8px;cursor:pointer;font-size:13px;">关闭</button>'
+        +'</div>'
+        +'</div>';
+      document.body.appendChild(m);
+      m.addEventListener('click', function(e){ if(e.target===m) m.remove(); });
+    }catch(err){ console.error('[Snapshot] 管理界面失败:', err); }
+  }
+};
+
+/* ── 云端上传前自动快照 ── */
+(function(){
+  var _orig = window.tpiSaveToday;
+  if(typeof _orig==='function'){
+    window.tpiSaveToday = async function(){
+      try{ window.TPISnapshotSystem.createSnapshot('自动快照-上传前').catch(function(){}); }catch(e){}
+      return _orig.apply(this, arguments);
+    };
+    console.log('[Snapshot] 已挂接 tpiSaveToday 自动快照');
+  }
+})();
+
+/* ── 注入"📸快照"按钮到页面同步区 ── */
+(function(){
+  function _inject(){
+    if(document.getElementById('_tpi_snap_btn')) return;
+    // 寻找保存/同步按钮
+    var anchor = document.getElementById('save-btn')
+               || document.querySelector('[onclick*="tpiSaveToday"],[onclick*="SaveToday"],[onclick*="upload"],[id*="save"]');
+    if(!anchor || !anchor.parentElement) return;
+    var btn = document.createElement('button');
+    btn.id   = '_tpi_snap_btn';
+    btn.type = 'button';
+    btn.textContent = '📸 快照';
+    btn.style.cssText = 'padding:8px 16px;background:linear-gradient(135deg,#8b5cf6,#6d28d9);'
+      +'color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:13px;'
+      +'margin-left:8px;box-shadow:0 2px 8px rgba(109,40,217,.25);vertical-align:middle;';
+    btn.onclick = function(){ window.TPISnapshotSystem.showSnapshotManager(); };
+    anchor.parentElement.insertBefore(btn, anchor.nextSibling);
+    console.log('[Snapshot] 快照按钮已注入');
+  }
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded', function(){ setTimeout(_inject, 1500); }, {once:true});
+  }else{
+    setTimeout(_inject, 1500);
+  }
+})();
+
+console.log('✅ [Snapshot] Git驱动版快照系统已加载 — IndexedDB专属库 + localStorage备索引 + Gist云端通道');
+})();
 </script>
 </body>
 </html>
