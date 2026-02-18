@@ -30128,26 +30128,46 @@ function updateAuthPanels(){
 
   // --- Gist API ---
   // --- Auth fetch helper (Bearer/token fallback) ---
-  async function fetchWithAuth(url, options, gistToken){
-    const baseHeaders = (options && options.headers && typeof options.headers==='object') ? options.headers : {};
-    const opt1 = Object.assign({}, options || {});
-    opt1.headers = Object.assign({}, baseHeaders, {
-      'Authorization': `Bearer ${gistToken}`,
+  // --- fetch helper (Bearer/token fallback) ---
+async function fetchWithAuth(url, options, gistToken){
+  const baseHeaders = (options && options.headers && typeof options.headers==='object') ? options.headers : {};
+  const optBase = Object.assign({}, options || {});
+  const timeoutMs = (optBase && optBase.__timeoutMs) ? Number(optBase.__timeoutMs) : 30000; // 30s
+  // 清理自定义字段，避免传给 fetch
+  try{ delete optBase.__timeoutMs; }catch(e){}
+
+  async function _fetchOnce(headers){
+    const controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    const t = controller ? setTimeout(()=>{ try{ controller.abort(); }catch(e){} }, timeoutMs) : null;
+    try{
+      const opt = Object.assign({}, optBase);
+      opt.headers = Object.assign({}, baseHeaders, headers);
+      if (controller) opt.signal = controller.signal;
+      return await fetch(url, opt);
+    }catch(err){
+      // 将网络错误统一为可读信息
+      const msg = (err && (err.name==='AbortError')) ? `网络超时（>${timeoutMs/1000}s）` : (err && err.message ? err.message : String(err));
+      throw new Error(msg);
+    }finally{
+      if (t) clearTimeout(t);
+    }
+  }
+
+  // 1) Bearer
+  let res = await _fetchOnce({
+    'Authorization': `Bearer ${gistToken}`,
+    'Accept': baseHeaders['Accept'] || 'application/vnd.github+json'
+  });
+
+  // 2) Fallback: classic PAT expects "token"
+  if (res && (res.status === 401 || res.status === 403)) {
+    res = await _fetchOnce({
+      'Authorization': `token ${gistToken}`,
       'Accept': baseHeaders['Accept'] || 'application/vnd.github+json'
     });
-
-    let res = await fetch(url, opt1);
-    if (res && (res.status === 401 || res.status === 403)) {
-      // Fallback for classic PAT that expects "token" scheme in some environments
-      const opt2 = Object.assign({}, options || {});
-      opt2.headers = Object.assign({}, baseHeaders, {
-        'Authorization': `token ${gistToken}`,
-        'Accept': baseHeaders['Accept'] || 'application/vnd.github+json'
-      });
-      res = await fetch(url, opt2);
-    }
-    return res;
   }
+  return res;
+}
 
   async function gistGet(gistToken){
     return await fetchWithAuth(GIST_API, {
@@ -30221,6 +30241,15 @@ function parseGistFileContent(gistJson){
     const nsKey = `${username}::${dateKey}`;
 
     try{
+// UI: 立即给出“正在保存”反馈，避免用户以为“点了没反应”
+const _saveBtn = document.getElementById('save-btn') || document.querySelector('button[onclick*="tpiSaveToday"]');
+const _saveBtnText = _saveBtn ? (_saveBtn.innerText || _saveBtn.textContent || '') : '';
+if (_saveBtn) {
+  try{ _saveBtn.disabled = true; }catch(e){}
+  try{ _saveBtn.dataset._tpi_old_text = _saveBtnText; }catch(e){}
+  try{ _saveBtn.innerText = '⏳ 正在上传…'; }catch(e){}
+}
+try{ tpiShowMsg('tpi-sync-msg', `⏳ 正在保存到云端：${dateKey}\n（正在读取云端版本并合并上传…）`, false); }catch(e){}
       // 1) GET 原 Gist
       const resGet = await gistGet(token);
 
@@ -30397,7 +30426,18 @@ function parseGistFileContent(gistJson){
       console.error('[Gist Save] failed:', err);
       tpiShowMsg('tpi-sync-msg',`❌ 保存失败，请检查网络：${err.message || err}`, true);
       return false;
+}finally{
+  // UI: 恢复按钮状态
+  try{
+    const _saveBtn = document.getElementById('save-btn') || document.querySelector('button[onclick*="tpiSaveToday"]');
+    if (_saveBtn) {
+      try{ _saveBtn.disabled = false; }catch(e){}
+      const old = _saveBtn.dataset ? _saveBtn.dataset._tpi_old_text : '';
+      if (old) { try{ _saveBtn.innerText = old; }catch(e){} }
+      try{ delete _saveBtn.dataset._tpi_old_text; }catch(e){}
     }
+  }catch(e){}
+}
   };
 
   // Gist 后端实现。
