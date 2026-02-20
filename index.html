@@ -30871,7 +30871,13 @@ function parseGistFileContent(gistJson){
         // ✅ Fix: 使用 window.__tpi_conflict_confirmed 标志位，确保同一冲突版本只提示一次
         const conflictKey = 'tpi_conflict_confirmed_' + remoteUpdated;
         const alreadyConfirmed = window[conflictKey] === true;
+        // ✅ Fix: 若上传正在进行（如快照内部静默推送），跳过冲突检查，避免重入
+        if (window.__TPI_UPLOAD_IN_PROGRESS__) {
+          // 静默推送路径：直接跳过冲突检测，继续保存
+        } else
         if (lastSeen && remoteUpdated && lastSeen !== remoteUpdated && !alreadyConfirmed){
+          // ✅ 设置全局上传锁，防止弹窗等待期间其他自动触发再次进入冲突检查
+          window.__TPI_UPLOAD_IN_PROGRESS__ = true;
           // 立即更新 lastSeen，防止重复弹窗（无论用户选择什么）
           ssSet('tpi_gist_last_seen_updated_at', remoteUpdated);
           // ✅ Fix: 使用内联自定义弹窗（Promise封装），彻底避免原生 confirm() 和重复弹窗问题
@@ -30910,8 +30916,10 @@ function parseGistFileContent(gistJson){
           }
           // 用户已确认：记录到 session 标志位，防止同一云端版本多次弹窗
           window[conflictKey] = true;
+          // ✅ 解除全局上传锁
+          window.__TPI_UPLOAD_IN_PROGRESS__ = false;
         }
-      }catch(e){}
+      }catch(e){ window.__TPI_UPLOAD_IN_PROGRESS__ = false; }
 
       const allData = parseGistFileContent(gistJson);
 
@@ -31313,6 +31321,12 @@ function parseGistFileContent(gistJson){
   };
 
 window.tpiSaveToday = async function(date){
+    // ✅ Fix: 防止并发重入（弹窗等待期间的自动触发、快照内部调用等）
+    if (window.__TPI_SAVE_TODAY_RUNNING__) {
+      console.log('[tpiSaveToday] 已有上传任务进行中，跳过本次调用');
+      return false;
+    }
+    window.__TPI_SAVE_TODAY_RUNNING__ = true;
     try{
       const dateKey = (date && String(date).trim()) ? String(date).trim() : getSelectedDate();
       
@@ -31339,6 +31353,9 @@ window.tpiSaveToday = async function(date){
       console.error('[tpiSaveToday] failed:', err);
       tpiShowMsg('tpi-sync-msg',`❌ 保存失败，请检查网络：${err.message || err}`, true);
       return false;
+    }finally{
+      // ✅ Fix: 无论成功/失败/取消，都释放重入锁
+      window.__TPI_SAVE_TODAY_RUNNING__ = false;
     }
   };
 
@@ -32233,9 +32250,13 @@ window.TPISnapshotSystem = {
       await this._pruneOld(date);
 
       // 4. 静默推送 Gist（不阻塞，失败不报错）
+      // ✅ Fix: 防止递归死循环 —— createSnapshot 内部绝不再触发快照，用原始函数直接上传
       try{
-        if(typeof window.tpiSaveToday==='function') window.tpiSaveToday().catch(function(){});
-      }catch(e){}
+        if(typeof window.__tpiSaveToday_orig==='function' && !window.__TPI_SNAPSHOT_UPLOADING__){
+          window.__TPI_SNAPSHOT_UPLOADING__ = true;
+          window.__tpiSaveToday_orig().catch(function(){}).finally(function(){ window.__TPI_SNAPSHOT_UPLOADING__ = false; });
+        }
+      }catch(e){ window.__TPI_SNAPSHOT_UPLOADING__ = false; }
 
       console.log('[Snapshot] 创建成功:', snap.id);
       this._toast('📸 快照已保存', 'success');
@@ -32396,11 +32417,18 @@ window.TPISnapshotSystem = {
 (function(){
   var _orig = window.tpiSaveToday;
   if(typeof _orig==='function'){
+    // ✅ Fix: 保存原始函数引用，供 createSnapshot 内部静默上传使用（避免递归）
+    window.__tpiSaveToday_orig = _orig;
+    window.__TPI_SNAPSHOT_UPLOADING__ = false;
     window.tpiSaveToday = async function(){
+      // ✅ Fix: 若是 createSnapshot 内部触发的静默上传，直接走原始函数，不再创建快照（防止递归）
+      if(window.__TPI_SNAPSHOT_UPLOADING__) return _orig.apply(this, arguments);
+      // ✅ Fix: 若主上传已在进行中（如用户点了上传，弹窗等待时），跳过快照，直接走原始函数
+      if(window.__TPI_SAVE_TODAY_RUNNING__) return _orig.apply(this, arguments);
       try{ window.TPISnapshotSystem.createSnapshot('自动快照-上传前').catch(function(){}); }catch(e){}
       return _orig.apply(this, arguments);
     };
-    console.log('[Snapshot] 已挂接 tpiSaveToday 自动快照');
+    console.log('[Snapshot] 已挂接 tpiSaveToday 自动快照（已修复防递归）');
   }
 })();
 
