@@ -30869,12 +30869,35 @@ function parseGistFileContent(gistJson){
         const remoteUpdated = (gistJson && gistJson.updated_at) ? String(gistJson.updated_at) : '';
         // 若用户曾在本会话中下载/读取过云端，而云端更新时间已变化，则提示可能存在覆盖风险
         if (lastSeen && remoteUpdated && lastSeen !== remoteUpdated){
-          const msg = '⚠️ 检测到云端数据在你上次读取后发生了更新，继续保存可能覆盖其它设备的更新。\n\n是否继续保存到云端？';
-          const ok = confirm(msg);
-          if (!ok){
+          // ✅ Fix: 使用非阻塞的 showModal（Promise封装）替代 confirm()，避免页面卡住
+          const userConfirmed = await new Promise((resolve) => {
+            try {
+              if (typeof window.showModal === 'function') {
+                window.showModal({
+                  type: 'warning',
+                  title: '云端数据冲突提示',
+                  message: '⚠️ 检测到云端数据在你上次读取后发生了更新，继续保存可能覆盖其它设备的更新。<br><br>是否继续保存到云端？',
+                  confirmText: '确定保存',
+                  cancelText: '取消',
+                  showCancel: true,
+                  showConfirm: true,
+                  onConfirm: () => resolve(true),
+                  onCancel: () => resolve(false)
+                });
+              } else {
+                // fallback: 直接继续保存，避免因 showModal 不可用而卡住
+                resolve(true);
+              }
+            } catch(modalErr) {
+              resolve(true); // fallback: 继续保存
+            }
+          });
+          if (!userConfirmed){
             tpiShowMsg('tpi-sync-msg','ℹ️ 已取消保存（为避免覆盖云端更新）', false);
             return false;
           }
+          // 用户确认后立即更新 lastSeen 为当前云端时间，避免下次再次触发冲突提示
+          ssSet('tpi_gist_last_seen_updated_at', remoteUpdated);
         }
       }catch(e){}
 
