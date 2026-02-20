@@ -31478,39 +31478,17 @@ const dateKey = (date && String(date).trim()) ? String(date).trim() : getSelecte
       return false;
     }
   };
+  // ✅ 兼容旧按钮：saveToGist / loadFromGist — 仅注册一次，防止重复覆盖
   // Legacy onclick compatibility: old buttons may still call saveToGist/loadFromGist
-  try{
+  if (!window.__TPI_GIST_COMPAT_REGISTERED__) {
+    window.__TPI_GIST_COMPAT_REGISTERED__ = true;
     window.saveToGist = function(date){ return window.tpiSaveToday(date); };
     window.loadFromGist = function(date){ return window.tpiLoadToday(date); };
-  }catch(e){}
-
+  }
 
   // 兼容：支持传入任意日期进行同步（历史日期同步）
   window.tpiSaveTodayData = window.tpiSaveToday;
   window.tpiLoadTodayData = window.tpiLoadToday;
-
-  
-// --- 兼容旧按钮：saveToGist / loadFromGist（保持 UI 不变） ---
-window.saveToGist = async function(){
-  try{
-    const ok = await window.tpiSaveToday();
-    if (ok) { try{ window.showNotification && window.showNotification('✅ 已同步到 Gist', 'success'); }catch(e){} }
-    return ok;
-  }catch(err){
-    try{ window.showNotification && window.showNotification('❌ 同步失败：' + (err && err.message ? err.message : err), 'error'); }catch(e){}
-    throw err;
-  }
-};
-window.loadFromGist = async function(date){
-  try{
-    const data = await window.tpiLoadToday(date);
-    try{ window.showNotification && window.showNotification('✅ 已从 Gist 下载', 'success'); }catch(e){}
-    return data;
-  }catch(err){
-    try{ window.showNotification && window.showNotification('❌ 下载失败：' + (err && err.message ? err.message : err), 'error'); }catch(e){}
-    throw err;
-  }
-};
 
 // --- Auto backup (every 5 min), only when logged in ---
   
@@ -31993,6 +31971,9 @@ console.log('✅ [TPI优化] 函数增强包装器已加载');
     
     // 监听页面变化
     function setupObservers() {
+        // ✅ 防重复绑定：若已初始化则直接返回，避免多次调用导致事件监听器堆积
+        if (window.__TPI_SCORE_OBSERVERS_READY__) return;
+        window.__TPI_SCORE_OBSERVERS_READY__ = true;
         // 监听所有分数输入框的变化
         const scoreInputs = [
             'ma7-score',
