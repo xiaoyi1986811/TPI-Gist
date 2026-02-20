@@ -576,7 +576,7 @@ window.__tpi_legacy_saveTpiData_1 = function () {
         __tpi_ls_set(`tpi_temp_snapshot_${dateKey}`, JSON.stringify(tempSnapshot));
         
         alert('⚠️ 云端同步功能未就绪，已保存临时快照\n请稍后手动上传到云端');
-        console.log('[临时快照] saved for', dateKey);
+
     } catch (e) {
         console.error('[SAVE] failed:', e);
         alert('❌ 保存失败：请看控制台');
@@ -1919,14 +1919,11 @@ window.restoreUIFromData = function(data) {
     return;
   }
 
-  console.log('[restoreUIFromData] 开始恢复数据，字段数:', Object.keys(data).length);
-
   // 先恢复日期
   let dateInput = document.getElementById('date-input');
   if (!dateInput) dateInput = document.querySelector('input[placeholder="📅 选择日期"]');
   if (dateInput && data["date-input"]) {
     dateInput.value = data["date-input"];
-    console.log('[restoreUIFromData] 恢复日期:', data["date-input"]);
   }
 
 
@@ -1937,7 +1934,6 @@ window.restoreUIFromData = function(data) {
     FIELDS.booleanFields.forEach(key => { const el = document.getElementById(key); if (el && data[key] !== undefined) el.checked = !!data[key]; });
     FIELDS.textFields.forEach(key => { const el = document.getElementById(key); if (el && data[key] !== undefined) el.value = String(data[key] || ""); });
     FIELDS.selectFields.forEach(key => { const el = document.getElementById(key); if (el && data[key] !== undefined) el.value = data[key]; });
-    console.log('[restoreUIFromData] 旧字段恢复完成');
   } catch (e) {
     console.warn('[restoreUIFromData] legacy restore failed:', e);
   }
@@ -1947,7 +1943,6 @@ window.restoreUIFromData = function(data) {
   try {
     if (data["_formState"] && typeof data["_formState"] === 'object') {
       __tpi_restoreFormState(data["_formState"]);
-      console.log('[restoreUIFromData] _formState 恢复完成，项数:', Object.keys(data["_formState"]).length);
     }
   } catch (e) {
     console.warn('[restoreUIFromData] formState restore failed:', e);
@@ -2182,12 +2177,9 @@ const __fixEvents = (arr) => (arr || []).map((it, idx) => {
 
   // 最后：触发重新计算，保证分数/评级/徽章状态立刻正确
   __tpi_triggerRecalc();
-
-
-  console.log('✅ UI 已从数据恢复(v8完整快照):', data);
 };
 
-console.log('✅ 独裁补丁 v5 已在 <head> 强制加载 (collectDailyData & restoreUIFromData)');
+// 独裁补丁 v5 已加载
 // ✅ [立即保存按钮] 保存当前所有数据到本地缓存
 window.__tpi_saveNow = function() {
   try {
@@ -2271,7 +2263,6 @@ window.__tpi_saveNow = function() {
             
             return originalUpdate.apply(this, arguments);
         };
-        console.log('✅ ScoreDashboard.update 性能监控已启用');
     }
 })();
 // ========================================
@@ -2286,7 +2277,6 @@ window.getTpiDayData = function(dateStr) {
     if (tempSnapshot) {
       const snap = JSON.parse(tempSnapshot);
       if (snap && snap.data) {
-        console.log(`[读取数据] 临时快照: ${dateStr}`);
         return snap.data;
       }
     }
@@ -2294,13 +2284,11 @@ window.getTpiDayData = function(dateStr) {
 
   // 2. 读取云端下载缓存（如果存在）
   if (window.__TPI_CLOUD_CACHE__ && window.__TPI_CLOUD_CACHE__[dateStr]) {
-    console.log(`[读取数据] 云端缓存: ${dateStr}`);
     return window.__TPI_CLOUD_CACHE__[dateStr];
   }
 
   // 3. 读取合并库（兼容旧数据）
   if (window.__TPI_MERGED_DB__ && window.__TPI_MERGED_DB__[dateStr]) {
-    console.log(`[读取数据] 合并库: ${dateStr}`);
     return window.__TPI_MERGED_DB__[dateStr];
   }
 
@@ -2308,12 +2296,10 @@ window.getTpiDayData = function(dateStr) {
   try {
     const local = __tpi_ls_get(`tpi_data_${dateStr}`);
     if (local) {
-      console.log(`[读取数据] 本地缓存(旧): ${dateStr}`);
       return JSON.parse(local);
     }
   } catch(e) {}
 
-  console.log(`[读取数据] 无数据: ${dateStr}`);
   return null;
 };
 
@@ -2426,12 +2412,7 @@ window.getTpiDayData = function(dateStr) {
     window.FutureRadar.handleFileUpload = function (evt) {
       try {
         const file = evt && evt.target && evt.target.files && evt.target.files[0];
-        // 不强行解析文件，避免破坏你已有的导入/导出链路；
-        // 仅在用户真正上传时给出轻提示（可选）
-        if (file) {
-          // 不刷屏
-          console.log('[FutureRadar] file selected:', file.name);
-        }
+        // 不强行解析文件，避免破坏你已有的导入/导出链路
       } catch (e) {
         // 吃掉异常，避免中断其他流程
       }
@@ -3001,7 +2982,7 @@ window.__tpi_legacy_saveTpiData_2 = function () {
         }
         
         alert('✅ 当前数据已真实写入本地缓存（localStorage）');
-        console.log('[SAVE] saved snapshot for', dateKey);
+
     } catch (e) {
         console.error('[SAVE] failed:', e);
         alert('❌ 保存失败：请看控制台');
@@ -3710,7 +3691,6 @@ window.closeAllModals = function() {
 
 // 0.1 前往云端同步设置
 window.goToCloudSync = function() {
-    console.log('🔄 [goToCloudSync] 前往云端同步设置');
     try {
         window.closeAllModals();
         sessionStorage.setItem('tpi_mobile_prompt_shown', 'true');
@@ -3734,11 +3714,6 @@ window.goToCloudSync = function() {
                     syncSection.style.backgroundColor = '';
                 }, 2000);
             }, 500);
-            
-            console.log('✅ [goToCloudSync] 已滚动到云端同步区域');
-        } else {
-            console.warn('⚠️ [goToCloudSync] 未找到云端同步区域');
-            
         }
     } catch (error) {
         console.error('❌ [goToCloudSync] 跳转失败:', error);
@@ -3747,7 +3722,6 @@ window.goToCloudSync = function() {
 
 // 0.2 启用移动端提示
 window.enableMobileTips = function() {
-    console.log('📱 [enableMobileTips] 启用移动端提示');
     try {
         __tpi_ls_set('tpi_mobile_tips_enabled', 'true');
         window.closeAllModals();
@@ -3758,7 +3732,6 @@ window.enableMobileTips = function() {
             window.MobileOptimizer.showMobileTipsBanner();
         }
         
-        console.log('✅ [enableMobileTips] 移动端提示已启用');
         alert('✅ 移动端提示已启用\n\n您将看到移动端使用提示横幅');
     } catch (error) {
         console.error('❌ [enableMobileTips] 启用失败:', error);
@@ -4008,12 +3981,9 @@ window.exportReportComplete = function(format) {
 
 // 2. 从云端加载函数 - 统一转发到 Gist 同步下载（保留旧函数名，避免旧按钮/旧模块失效）
 window.loadFromCloudComplete = function() {
-    console.log('🔵 [loadFromCloudComplete] 从云端加载功能被调用');
-    console.log('🔵 [loadFromCloudComplete] 执行时间:', new Date().toLocaleString());
     try {
         // 优先：Gist 同步下载（你页面的主入口）
         if (typeof window.tpiLoadToday === 'function') {
-            console.log('✅ [loadFromCloudComplete] 转发到 tpiLoadToday()');
             return window.tpiLoadToday();
         }
         // 兜底：若仍存在旧 GitHub 入口，则允许使用（但不作为主路径）
@@ -4024,7 +3994,6 @@ window.loadFromCloudComplete = function() {
         alert('⚠️ 云端下载入口未初始化，请刷新页面后重试');
     } catch (error) {
         console.error('❌ [loadFromCloudComplete] 从云端加载失败:', error);
-        console.error('❌ [loadFromCloudComplete] 错误堆栈:', error.stack);
         alert('❌ 加载失败\n\n错误信息: ' + error.message + '\n\n请查看控制台获取详细信息');
     }
 };
@@ -4070,39 +4039,26 @@ window.createNewBackup = function() {
 
 // 5. 恢复备份函数
 window.restoreBackup = function(backupKey) {
-    console.log('📥 [restoreBackup] 被调用');
-    console.log('📥 [restoreBackup] 备份键:', backupKey);
-    console.log('📥 [restoreBackup] 执行时间:', new Date().toLocaleString());
-    
     try {
         if (!confirm('⚠️ 确定要恢复此备份吗？\n\n当前数据将被覆盖！')) {
-            console.log('❌ [restoreBackup] 用户取消操作');
             return;
         }
-        
-        console.log('🔍 [restoreBackup] 开始读取备份数据...');
         
         const backupData = JSON.parse(__tpi_ls_get(backupKey));
         if (!backupData) {
-            console.error('❌ [restoreBackup] 备份数据不存在');
             alert('❌ 备份数据不存在');
             return;
         }
-        
-        console.log('📊 [restoreBackup] 备份包含', Object.keys(backupData).length, '条数据');
         
         // 恢复数据
         Object.keys(backupData).forEach(key => {
             __tpi_ls_set(key, backupData[key]);
         });
         
-        console.log('✅ [restoreBackup] 备份恢复成功');
-        
         alert('✅ 备份恢复成功！\n\n页面将自动刷新...');
         setTimeout(() => location.reload(), 1000);
     } catch (error) {
         console.error('❌ [restoreBackup] 恢复失败:', error);
-        console.error('❌ [restoreBackup] 错误堆栈:', error.stack);
         alert('❌ 恢复备份失败\n\n错误信息: ' + error.message);
     }
 };
@@ -4111,9 +4067,6 @@ window.restoreBackup = function(backupKey) {
 window.deleteBackup = function(){ try{ alert('ℹ️ 备份管理器已移除：无法在此处删除备份'); }catch(e){} };
 // 7. 安全的Toast显示函数（用于InputValidator未初始化时）
 window.safeShowToast = function(message, type) {
-    console.log('📢 [safeShowToast] 被调用');
-    console.log('📢 [safeShowToast] 消息:', message, '类型:', type);
-    
     try {
         // 尝试使用NotifySystem
         if (window.NotifySystem && typeof window.NotifySystem.showToast === 'function') {
@@ -4128,7 +4081,6 @@ window.safeShowToast = function(message, type) {
         }
         
         // 降级到alert
-        console.warn('⚠️ [safeShowToast] Toast系统未初始化，使用alert');
         const icon = {
             'success': '✅',
             'error': '❌',
@@ -4169,7 +4121,6 @@ if (!window.InputValidator) {
             window.safeShowToast(message, type);
         }
     };
-    console.log('✅ 创建InputValidator占位对象');
 
     // ✅ AutoSaveManager 占位（防止未定义导致脚本中断，真实实现若存在会覆盖）
     if (!window.AutoSaveManager) {
@@ -4178,24 +4129,8 @@ if (!window.InputValidator) {
     }
 }
 
-console.log('✅ [早期初始化] 关键函数定义完成');
-console.log('✅ window.closeAllModals:', typeof window.closeAllModals);
-console.log('✅ window.goToCloudSync:', typeof window.goToCloudSync);
-console.log('✅ window.enableMobileTips:', typeof window.enableMobileTips);
-console.log('✅ window.exportReportComplete:', typeof window.exportReportComplete);
-console.log('✅ window.loadFromCloudComplete:', typeof window.loadFromCloudComplete);
-console.log('✅ window.openBackupManagerComplete:', typeof window.openBackupManagerComplete);
-console.log('✅ window.createNewBackup:', typeof window.createNewBackup);
-console.log('✅ window.restoreBackup:', typeof window.restoreBackup);
-console.log('✅ window.deleteBackup:', typeof window.deleteBackup);
-console.log('✅ window.undoActionComplete:', typeof window.undoActionComplete);
-console.log('✅ window.redoActionComplete:', typeof window.redoActionComplete);
-
 // 8. 导入数据函数
 window.importDataComplete = function() {
-    console.log('📥 [importDataComplete] 被调用');
-    console.log('📥 [importDataComplete] 执行时间:', new Date().toLocaleString());
-    
     try {
         // 尝试两个可能的文件输入ID
         let fileInput = document.getElementById('import-file');
@@ -4204,29 +4139,23 @@ window.importDataComplete = function() {
         }
         
         if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
-            console.warn('⚠️ [importDataComplete] 未选择文件');
             alert('⚠️ 请先选择要导入的文件');
             return;
         }
         
         const file = fileInput.files[0];
-        console.log('📁 [importDataComplete] 文件名:', file.name);
-        console.log('📁 [importDataComplete] 文件大小:', (file.size / 1024).toFixed(2), 'KB');
         
         const reader = new FileReader();
         
         reader.onload = function(e) {
             try {
-                console.log('🔍 [importDataComplete] 文件读取完成');
                 const content = e.target.result;
                 let data;
                 
                 // 支持多种格式
                 if (file.name.endsWith('.json')) {
-                    console.log('📄 [importDataComplete] 解析JSON格式');
                     data = JSON.parse(content);
                 } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-                    console.log('📊 [importDataComplete] 解析Excel格式');
                     // 检查XLSX库
                     if (typeof XLSX !== 'undefined') {
                         const workbook = XLSX.read(content, { type: 'binary' });
@@ -4238,7 +4167,6 @@ window.importDataComplete = function() {
                         return;
                     }
                 } else if (file.name.endsWith('.csv')) {
-                    console.log('📄 [importDataComplete] 解析CSV格式');
                     const lines = content.split('\n');
                     const headers = lines[0].split(',').map(h => h.trim());
                     const values = lines[1].split(',').map(v => v.trim());
@@ -4247,7 +4175,6 @@ window.importDataComplete = function() {
                         data[header] = values[index] || '';
                     });
                 } else {
-                    console.error('❌ [importDataComplete] 不支持的文件格式:', file.name);
                     alert('⚠️ 支持的格式: JSON, Excel, CSV\n\n当前文件: ' + file.name);
                     return;
                 }
@@ -4257,8 +4184,6 @@ window.importDataComplete = function() {
                     throw new Error('无效的数据格式');
                 }
                 
-                console.log('✅ [importDataComplete] 数据解析成功');
-                
                 // 确认导入
                 const dateStr = document.getElementById('date-input')?.value || new Date().toISOString().split('T')[0];
                 const confirmMsg = `📥 确认导入数据？\n\n` +
@@ -4267,16 +4192,12 @@ window.importDataComplete = function() {
                     `⚠️ 这将覆盖当前日期的数据！`;
                 
                 if (confirm(confirmMsg)) {
-                    console.log('💾 [importDataComplete] 用户确认，开始导入');
-                    
                     // 确保数据有日期字段
                     if (!data.date) {
                         data.date = dateStr;
                     }
                     
                     __tpi_ls_set('tpi_data_' + dateStr, JSON.stringify(data));
-                    
-                    console.log('✅ [importDataComplete] 数据已保存到localStorage');
                     
                     alert('✅ 数据导入成功！\n\n即将刷新页面以显示新数据');
                     
@@ -4286,8 +4207,6 @@ window.importDataComplete = function() {
                     }
                     
                     location.reload();
-                } else {
-                    console.log('❌ [importDataComplete] 用户取消导入');
                 }
                 
             } catch (error) {
@@ -4311,18 +4230,12 @@ window.importDataComplete = function() {
         
     } catch (error) {
         console.error('❌ [importDataComplete] 执行失败:', error);
-        console.error('❌ [importDataComplete] 错误堆栈:', error.stack);
         alert('❌ 导入数据失败\n\n错误信息: ' + error.message);
     }
 };
 
-console.log('✅ window.importDataComplete:', typeof window.importDataComplete);
-
 // 9. 切换暗黑主题函数
 window.toggleDarkThemeComplete = function() {
-    console.log('🌓 [toggleDarkThemeComplete] 被调用');
-    console.log('🌓 [toggleDarkThemeComplete] 执行时间:', new Date().toLocaleString());
-    
     try {
         const body = document.body;
         body.classList.toggle('dark-theme');
@@ -4330,50 +4243,35 @@ window.toggleDarkThemeComplete = function() {
         const isDark = body.classList.contains('dark-theme');
         __tpi_ls_set('tpi_theme', isDark ? 'dark' : 'light');
         
-        console.log('✅ [toggleDarkThemeComplete] 主题切换成功，当前模式:', isDark ? '暗黑' : '明亮');
-        
         alert(isDark ? '🌙 已切换到暗黑模式' : '☀️ 已切换到明亮模式');
     } catch (error) {
         console.error('❌ [toggleDarkThemeComplete] 主题切换失败:', error);
-        console.error('❌ [toggleDarkThemeComplete] 错误堆栈:', error.stack);
         alert('❌ 主题切换失败\n\n错误信息: ' + error.message);
     }
 };
 
 // 10. 恢复默认主题函数
 window.restoreDarkThemeComplete = function() {
-    console.log('☀️ [restoreDarkThemeComplete] 被调用');
-    console.log('☀️ [restoreDarkThemeComplete] 执行时间:', new Date().toLocaleString());
-    
     try {
         document.body.classList.remove('dark-theme');
         __tpi_ls_remove('tpi_theme');
         
-        console.log('✅ [restoreDarkThemeComplete] 已恢复默认主题');
-        
         alert('✅ 已恢复默认主题');
     } catch (error) {
         console.error('❌ [restoreDarkThemeComplete] 恢复主题失败:', error);
-        console.error('❌ [restoreDarkThemeComplete] 错误堆栈:', error.stack);
         alert('❌ 恢复失败\n\n错误信息: ' + error.message);
     }
 };
 
 console.log('✅ window.toggleDarkThemeComplete:', typeof window.toggleDarkThemeComplete);
-console.log('✅ window.restoreDarkThemeComplete:', typeof window.restoreDarkThemeComplete);
 
 // 11. 数据健康检查函数
 window.checkDataHealthComplete = function() {
-    console.log('💊 [checkDataHealthComplete] 被调用');
-    console.log('💊 [checkDataHealthComplete] 执行时间:', new Date().toLocaleString());
-    
     try {
         let totalKeys = 0;
         let tpiDataKeys = 0;
         let totalSize = 0;
         const issues = [];
-        
-        console.log('🔍 [checkDataHealthComplete] 开始扫描localStorage...');
         
         // 检查所有localStorage数据
         for (let i = 0; i < __tpi_ls_length(); i++) {
@@ -4392,22 +4290,14 @@ window.checkDataHealthComplete = function() {
                             const data = JSON.parse(value);
                             if (!data.date) {
                                 issues.push(`${key}: 缺少日期字段`);
-                                console.warn('⚠️ [checkDataHealthComplete] 问题:', key, '缺少日期字段');
                             }
                         } catch (e) {
                             issues.push(`${key}: 数据格式错误`);
-                            console.error('❌ [checkDataHealthComplete] 问题:', key, '数据格式错误');
                         }
                     }
                 }
             }
         }
-        
-        console.log('📊 [checkDataHealthComplete] 扫描完成');
-        console.log('📊 [checkDataHealthComplete] 总键数:', totalKeys);
-        console.log('📊 [checkDataHealthComplete] TPI数据:', tpiDataKeys);
-        console.log('📊 [checkDataHealthComplete] 存储大小:', (totalSize / 1024).toFixed(2), 'KB');
-        console.log('📊 [checkDataHealthComplete] 发现问题:', issues.length);
         
         // 计算存储空间使用率
         const maxSize = (window.__idbQuota || 2 * 1024 * 1024 * 1024); // IndexedDB 配额
@@ -4433,24 +4323,17 @@ window.checkDataHealthComplete = function() {
             report += `✅ 所有数据完整性良好`;
         }
         
-        console.log('✅ [checkDataHealthComplete] 报告生成完成');
-        
         alert(report);
         
     } catch (error) {
         console.error('❌ [checkDataHealthComplete] 健康检查失败:', error);
-        console.error('❌ [checkDataHealthComplete] 错误堆栈:', error.stack);
         alert('❌ 健康检查失败\n\n错误信息: ' + error.message);
     }
 };
 
-console.log('✅ window.checkDataHealthComplete:', typeof window.checkDataHealthComplete);
-
 // 12. showModal模态框函数
 if (typeof window.showModal === 'undefined') {
     window.showModal = function(options) {
-        console.log('📢 [showModal] 被调用, 选项:', options);
-        
         const {
             type = 'info',
             title = '提示',
@@ -4685,7 +4568,7 @@ console.log('✅ window.InputValidator.showToast:', typeof window.InputValidator
 // ═══════════════════════════════════════════════════════════════════
 
 window.__tpi_legacy_exportDataComplete_3 = function(format) {
-    console.log('[DataExport] 导出数据被调用，格式:', format);
+    
     
     try {
         // ============ 修复1: 先保存当前数据再导出 ============
@@ -4693,7 +4576,7 @@ window.__tpi_legacy_exportDataComplete_3 = function(format) {
         if (typeof window.saveToLocalStorage === 'function') {
             try {
                 window.saveToLocalStorage();
-                console.log('[DataExport] 已自动保存当前数据');
+                
             } catch (saveError) {
                 console.warn('[DataExport] 自动保存失败，继续导出:', saveError);
             }
@@ -4704,7 +4587,7 @@ window.__tpi_legacy_exportDataComplete_3 = function(format) {
                 const dateStr = document.getElementById('date-input')?.value || new Date().toISOString().split('T')[0];
                 const key = `tpi_data_${dateStr}`;
                 __tpi_ls_set(key, JSON.stringify(currentData));
-                console.log('[DataExport] 已手动保存当前数据');
+                
             } catch (collectError) {
                 console.warn('[DataExport] 手动保存失败，继续导出:', collectError);
             }
@@ -4712,7 +4595,7 @@ window.__tpi_legacy_exportDataComplete_3 = function(format) {
         // ============ 修复结束 ============
 
         const dateStr = document.getElementById('date-input')?.value || new Date().toISOString().split('T')[0];
-        console.log('[DataExport] 导出日期:', dateStr);
+        
         
         const dataStr = __tpi_ls_get('tpi_data_' + dateStr);
 
@@ -4723,7 +4606,7 @@ window.__tpi_legacy_exportDataComplete_3 = function(format) {
         }
 
         const data = JSON.parse(dataStr);
-        console.log('[DataExport] 数据加载成功，准备生成', format, '格式');
+        
         
         let content = '';
         let fileName = `TPI数据_${dateStr}`;
@@ -5189,7 +5072,7 @@ window.__tpi_legacy_exportDataComplete_3 = function(format) {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
 
-        console.log('[DataExport] 导出完成 - 格式:', format, '文件名:', fileName);
+        
         alert(`✅ 数据导出成功！\n\n格式: ${format.toUpperCase()}\n文件名: ${fileName}`);
 
     } catch (error) {
@@ -5265,7 +5148,7 @@ function safeJSONParseEarly(str, defaultValue = null) {
 
 // ===== 全局函数: 保存当前数据 =====
 window.__tpi_legacy_saveTpiData_3 = function() {
-    console.log('💾 执行保存草稿操作...');
+
     
     try {
         const formData = collectFormDataEarly();
@@ -5276,10 +5159,6 @@ window.__tpi_legacy_saveTpiData_3 = function() {
         
         // 同时保存一个时间戳
         __tpi_ls_set('tpi_draft_timestamp', new Date().toISOString());
-        
-        console.log('✅ 草稿保存成功');
-        console.log('📊 保存的字段数:', Object.keys(formData.fields).length);
-        console.log('📅 保存日期:', formData._date);
         
         showToastEarly(`草稿保存成功！\n已保存 ${Object.keys(formData.fields).length} 个字段`, 'success');
         
@@ -5293,30 +5172,20 @@ window.__tpi_legacy_saveTpiData_3 = function() {
 
 // ===== 全局函数: 恢复保存的数据 =====
 window.__tpi_legacy_loadTpiData_2 = function() {
-    console.log('📂 执行恢复草稿操作...');
-    
     try {
         const key = 'tpi_draft_data';
         const dataStr = __tpi_ls_get(key);
         
         if (!dataStr) {
-            console.warn('⚠️ 未找到草稿数据');
             showToastEarly('未找到保存的草稿数据', 'warning');
             return false;
         }
         
         const formData = safeJSONParseEarly(dataStr);
         if (!formData) {
-            console.error('❌ 草稿数据解析失败');
             showToastEarly('草稿数据已损坏，无法恢复', 'error');
             return false;
         }
-        
-        console.log('📊 草稿信息:');
-        console.log('  - 版本:', formData._version);
-        console.log('  - 保存时间:', formData._timestamp);
-        console.log('  - 日期:', formData._date);
-        console.log('  - 字段数:', Object.keys(formData.fields || {}).length);
         
         // 询问用户是否确认恢复
         const timestamp = __tpi_ls_get('tpi_draft_timestamp');
@@ -5330,7 +5199,6 @@ window.__tpi_legacy_loadTpiData_2 = function() {
         );
         
         if (!confirmed) {
-            console.log('❌ 用户取消恢复操作');
             return false;
         }
         
@@ -5354,7 +5222,6 @@ window.__tpi_legacy_loadTpiData_2 = function() {
             }
         });
         
-        console.log(`✅ 成功恢复 ${restoredCount} 个字段`);
         showToastEarly(`恢复成功！\n已恢复 ${restoredCount} 个字段`, 'success');
         
         // 尝试触发全局重新计算
@@ -5541,10 +5408,6 @@ window.exportAsCSV = function() {
     }
 
     console.log('✅ 所有函数已确保可在全局上下文中访问');
-    console.log('✅ saveTpiData 可用性:', typeof saveTpiData);
-    console.log('✅ loadTpiData 可用性:', typeof loadTpiData);
-    console.log('✅ exportAsJSON 可用性:', typeof exportAsJSON);
-    console.log('✅ exportDataComplete 可用性:', typeof exportDataComplete);
 }; // 修复: 添加缺失的闭合括号
   </script>
 <style id="tpi-v6-final-semantic-css">
@@ -8999,15 +8862,10 @@ const current = (this.sortMode && this.sortMode[key]) ? this.sortMode[key] : 'pr
 
     // ================= PushPlus 集成 =================
     openPushSettings() {
-        console.log('[FutureRadar] 打开设置弹窗');
-        console.log('[FutureRadar] 当前PushPlus Token:', this.pushConfig.token ? '已配置' : '未配置');
-        
         // 打开设置弹窗并加载当前配置
         document.getElementById('radar-settings-modal').style.display = 'flex';
         document.getElementById('radar-push-token').value = this.pushConfig.token || '';
         this.switchSettingsTab('push'); // 默认显示PushPlus配置页
-        
-        console.log('[FutureRadar] 设置弹窗已打开，默认显示PushPlus配置页');
     }
 
     closeSettingsModal() {
@@ -9183,10 +9041,6 @@ else FutureRadar.init();
     const originalOpenModal = FutureRadar.openModal.bind(FutureRadar);
     
     FutureRadar.openModal = function(type) {
-        console.log('🎯 [FutureRadar.openModal] 被调用');
-        console.log('🎯 [FutureRadar.openModal] 类型:', type);
-        console.log('🎯 [FutureRadar.openModal] 执行时间:', new Date().toLocaleString());
-        
         const typeNames = {
             'tempLife': '⚡ 生活临时',
             'tempAcademic': '🎓 学术临时',
@@ -9195,19 +9049,14 @@ else FutureRadar.init();
         };
         
         const typeName = typeNames[type] || type;
-        console.log('🎯 [FutureRadar.openModal] 类型名称:', typeName);
         
         try {
             // 检查是否存在完整的模态框元素
             const modalElement = document.getElementById('radar-modal');
             
             if (modalElement && originalOpenModal) {
-                // 如果模态框元素存在且原始函数存在，调用原始函数
-                console.log('✅ [FutureRadar.openModal] 调用原始openModal（完整模态框）');
                 originalOpenModal(type);
             } else if (modalElement) {
-                // 如果只有模态框元素，直接显示
-                console.log('✅ [FutureRadar.openModal] 直接显示模态框');
                 modalElement.style.display = 'flex';
                 modalElement.setAttribute('data-type', type);
                 const titleElement = modalElement.querySelector('.modal-title');
@@ -9215,17 +9064,13 @@ else FutureRadar.init();
                     titleElement.textContent = typeName;
                 }
             } else {
-                // 最后才提示不存在
-                console.warn('⚠️ [FutureRadar.openModal] 模态框元素不存在');
                 alert(`${typeName} 弹窗\n\nModal元素未找到，请刷新页面重试。`);
             }
         } catch (error) {
             console.error('❌ [FutureRadar.openModal] 错误:', error);
-            console.error('❌ [FutureRadar.openModal] 错误堆栈:', error.stack);
         }
     };
     
-    console.log('✅ [FutureRadar] openModal函数已包装，添加日志功能');
 })();
   </script>
 <!-- ==================== 标准操作程序 (SOP) 与填写规范 ==================== -->
@@ -12067,7 +11912,7 @@ else FutureRadar.init();
 <td class="center">
 <div style="display: flex; flex-direction: column; gap: 4px; align-items: center;">
 <input aria-label="下午阅读页数" class="tpi-inline-05" data-reading-input="" min="0" onblur="TPI.calculateAMI()" oninput="TPI.calculateAMI()" placeholder="0" type="number"/>
-<select aria-label="aria-label=" data-reading-level="" onchange="TPI.calculateAMI()" style="width: 70px; font-size: 11px; padding: 2px;" 下午阅读难度"认知负荷"="">
+<select aria-label="下午阅读难度认知负荷" data-reading-level="" onchange="TPI.calculateAMI()" style="width: 70px; font-size: 11px; padding: 2px;">
 <option value="1.0">
                Lv I (×1.0)
               </option>
@@ -12253,7 +12098,7 @@ else FutureRadar.init();
 <td class="center">
 <div style="display: flex; flex-direction: column; gap: 4px; align-items: center;">
 <input aria-label="晚上1阅读页数" class="tpi-inline-05" data-reading-input="" min="0" onblur="TPI.calculateAMI()" oninput="TPI.calculateAMI()" placeholder="0" type="number"/>
-<select aria-label="aria-label=" data-reading-level="" onchange="TPI.calculateAMI()" style="width: 70px; font-size: 11px; padding: 2px;" 晚上1阅读难度"认知负荷"="">
+<select aria-label="晚上1阅读难度认知负荷" data-reading-level="" onchange="TPI.calculateAMI()" style="width: 70px; font-size: 11px; padding: 2px;">
 <option value="1.0">
                Lv I (×1.0)
               </option>
@@ -12445,7 +12290,7 @@ else FutureRadar.init();
 <td class="center">
 <div style="display: flex; flex-direction: column; gap: 4px; align-items: center;">
 <input aria-label="晚上2阅读页数" class="tpi-inline-05" data-reading-input="" min="0" onblur="TPI.calculateAMI()" oninput="TPI.calculateAMI()" placeholder="0" type="number"/>
-<select aria-label="aria-label=" data-reading-level="" onchange="TPI.calculateAMI()" style="width: 70px; font-size: 11px; padding: 2px;" 晚上2阅读难度"认知负荷"="">
+<select aria-label="晚上2阅读难度认知负荷" data-reading-level="" onchange="TPI.calculateAMI()" style="width: 70px; font-size: 11px; padding: 2px;">
 <option value="1.0">
                Lv I (×1.0)
               </option>
@@ -12635,7 +12480,7 @@ else FutureRadar.init();
 <td class="center">
 <div style="display: flex; flex-direction: column; gap: 4px; align-items: center;">
 <input aria-label="机动阅读页数" class="tpi-inline-05" data-reading-input="" min="0" onblur="TPI.calculateAMI()" oninput="TPI.calculateAMI()" placeholder="0" type="number"/>
-<select aria-label="aria-label=" data-reading-level="" onchange="TPI.calculateAMI()" style="width: 70px; font-size: 11px; padding: 2px;" 机动阅读难度"认知负荷"="">
+<select aria-label="机动阅读难度认知负荷" data-reading-level="" onchange="TPI.calculateAMI()" style="width: 70px; font-size: 11px; padding: 2px;">
 <option value="1.0">
                Lv I (×1.0)
               </option>
@@ -21982,29 +21827,21 @@ const __exp = (function(){
             const originalLoadFromLocal = window.TPI.loadFromLocalStorage;
             if (originalLoadFromLocal && typeof originalLoadFromLocal === 'function') {
                 window.TPI.loadFromLocalStorage = function() {
-                    console.log('📂 [TPI.loadFromLocalStorage] 仅读本地功能被调用');
-                    console.log('📂 [TPI.loadFromLocalStorage] 执行时间:', new Date().toLocaleString());
-                    
                     try {
                         // 获取当前日期
                         const dateInput = document.getElementById('date-input');
                         const dateStr = dateInput ? dateInput.value : '';
                         
-                        console.log('📅 [TPI.loadFromLocalStorage] 目标日期:', dateStr);
-                        
                         if (!dateStr) {
-                            console.warn('⚠️ [TPI.loadFromLocalStorage] 未选择日期');
                             alert('⚠️ 请先选择要加载的日期');
                             return;
                         }
                         
                         const key = 'tpi_data_' + dateStr;
-                        console.log('🔑 [TPI.loadFromLocalStorage] 数据键:', key);
                         
                         // 检查数据是否存在
                         const dataStr = __tpi_ls_get(key);
                         if (!dataStr) {
-                            console.log('ℹ️ [TPI.loadFromLocalStorage] 该日期暂无保存数据，显示空白表单');
                             // 清空表单而不是报错
                             if (typeof __tpi_clearAllForm === 'function') {
                                 __tpi_clearAllForm();
@@ -22016,24 +21853,14 @@ const __exp = (function(){
                             return;
                         }
                         
-                        console.log('📊 [TPI.loadFromLocalStorage] 找到数据，大小:', Math.round(dataStr.length / 1024), 'KB');
-                        
                         // 调用原始函数
-                        console.log('🔧 [TPI.loadFromLocalStorage] 调用原始加载函数...');
                         originalLoadFromLocal.apply(this, arguments);
-                        console.log('✅ [TPI.loadFromLocalStorage] 数据加载完成');
                         
                     } catch (error) {
                         console.error('❌ [TPI.loadFromLocalStorage] 加载失败:', error);
-                        console.error('❌ [TPI.loadFromLocalStorage] 错误名称:', error.name);
-                        console.error('❌ [TPI.loadFromLocalStorage] 错误消息:', error.message);
-                        console.error('❌ [TPI.loadFromLocalStorage] 错误堆栈:', error.stack);
                         alert('❌ 加载失败\n\n错误: ' + error.message + '\n\n请查看控制台获取详细信息');
                     }
                 };
-                console.log('✅ [修复问题4] TPI.loadFromLocalStorage 已增强');
-            } else {
-                console.error('❌ [修复问题4] 未找到原始的loadFromLocalStorage函数');
             }
         })();
         
@@ -25258,30 +25085,23 @@ window.addEventListener('resize', function() {
 
     // 2. 仅存本地函数
     window.saveLocalOnlyComplete = function() {
-        console.log('💾 [saveLocalOnlyComplete] 仅存本地功能被调用');
-        console.log('💾 [saveLocalOnlyComplete] 执行时间:', new Date().toLocaleString());
-        
         try {
             // 获取当前日期
             const dateInput = document.getElementById('date-input');
             const dateStr = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
-            console.log('📅 [saveLocalOnlyComplete] 当前日期:', dateStr);
 
             // 尝试收集表单数据
             let formData = null;
 
             // 方法1: 使用window.collectFormData
             if (window.collectFormData && typeof window.collectFormData === 'function') {
-                console.log('🔧 [saveLocalOnlyComplete] 使用window.collectFormData收集数据');
                 formData = window.collectFormData();
             }
 
             // 方法2: 使用TPI.saveData
             if (!formData && window.TPI && typeof window.TPI.saveData === 'function') {
-                console.log('🔧 [saveLocalOnlyComplete] 使用TPI.saveData保存');
                 try {
                     window.TPI.saveData();
-                    console.log('✅ [saveLocalOnlyComplete] TPI.saveData调用成功');
                     alert('✅ 数据已保存到本地！\n\n日期: ' + dateStr + '\n注意: 仅保存在本地浏览器，未同步到云端');
                     return;
                 } catch (saveError) {
@@ -25292,11 +25112,9 @@ window.addEventListener('resize', function() {
 
             // 方法3: 手动收集表单数据
             if (!formData) {
-                console.log('🔧 [saveLocalOnlyComplete] 使用手动方式收集表单数据');
                 formData = {};
                 // 收集所有输入框的值
                 const inputs = document.querySelectorAll('input[type="number"], input[type="text"], textarea, select');
-                console.log('📊 [saveLocalOnlyComplete] 找到', inputs.length, '个输入元素');
                 
                 inputs.forEach(input => {
                     if (input.id) {
@@ -25307,27 +25125,19 @@ window.addEventListener('resize', function() {
                         }
                     }
                 });
-                
-                console.log('📊 [saveLocalOnlyComplete] 收集到的数据字段数:', Object.keys(formData).length);
             }
 
             // 保存到本地存储
             const key = 'tpi_data_' + dateStr;
             const dataStr = JSON.stringify(formData);
-            console.log('💾 [saveLocalOnlyComplete] 准备保存，key:', key);
-            console.log('💾 [saveLocalOnlyComplete] 数据大小:', Math.round(dataStr.length / 1024), 'KB');
             
             __tpi_ls_set(key, dataStr);
-            console.log('✅ [saveLocalOnlyComplete] 数据已保存到localStorage');
 
             // 显示成功消息
             alert('✅ 数据已保存到本地！\n\n日期: ' + dateStr + '\nkey: ' + key + '\n注意: 仅保存在本地浏览器，未同步到云端');
 
         } catch (error) {
             console.error('❌ [saveLocalOnlyComplete] 保存本地失败:', error);
-            console.error('❌ [saveLocalOnlyComplete] 错误名称:', error.name);
-            console.error('❌ [saveLocalOnlyComplete] 错误消息:', error.message);
-            console.error('❌ [saveLocalOnlyComplete] 错误堆栈:', error.stack);
             
             // 检查是否是存储配额错误
             if (error.name === 'QuotaExceededError') {
@@ -26439,18 +26249,7 @@ const ScoreDashboard = {
                         const sum = amiScore + fliScore + sysScore + bonusScore;
                         if (!isFinite(total) || total === 0) total = sum;
 
-                        // ✅ 减少日志频率，避免控制台刷屏
-                        if (!this._lastLogTime || Date.now() - this._lastLogTime > 2000) {
-                            console.log('[ScoreDashboard] 分数更新:', {
-                                MA7: ma7Score,
-                                AMI: amiScore,
-                                FLI: fliScore,
-                                SYS: sysScore,
-                                BONUS: bonusScore,
-                                总分: total
-                            });
-                            this._lastLogTime = Date.now();
-                        }
+                        // ✅ 已移除频繁日志，避免控制台刷屏
 
                         // 卡片式分数看板更新
                         this.updateElement('dashboard-ma7', ma7Score.toFixed(1));
@@ -26572,7 +26371,6 @@ const ScoreDashboard = {
     init: function() {
         // 防止重复初始化
         if (this.initialized) {
-            console.log('[ScoreDashboard] 已初始化，跳过');
             return;
         }
 
@@ -26616,7 +26414,6 @@ const ScoreDashboard = {
 
         // 标记为已初始化
         this.initialized = true;
-        console.log('[ScoreDashboard] 初始化完成 - 已绑定实时监听（使用防抖）');
     },
 
     // 只更新显示，不触发计算
@@ -26674,7 +26471,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // ✅ 修复：加载后延迟更新（会触发一次计算）
     setTimeout(() => {
         ScoreDashboard.update();
-        console.log('[ScoreDashboard] 页面加载后首次更新完成');
     }, 1000);
     
     // ✅ 修复：定期刷新显示（不触发计算，只更新显示）
@@ -26685,9 +26481,6 @@ document.addEventListener('DOMContentLoaded', function() {
         window.__TPI_SCORE_DISPLAY_TIMER__ = window.__TPI_SCORE_DISPLAY_TIMER__ || setInterval(() => {
             ScoreDashboard.updateDisplay(); // 只更新显示，不触发计算
         }, AUTO_REFRESH_INTERVAL);
-        console.log(`[ScoreDashboard] 自动刷新显示已启用，间隔${AUTO_REFRESH_INTERVAL/1000}秒`);
-    } else {
-        console.log('[ScoreDashboard] 自动刷新已禁用');
     }
 });
 
@@ -26699,8 +26492,6 @@ document.addEventListener('DOMContentLoaded', function() {
 if (window.TPI && window.TPI.updateTrendChart) {
     const originalUpdateTrendChart = window.TPI.updateTrendChart;
     window.TPI.updateTrendChart = function(days) {
-        console.log('📊 [TPI.updateTrendChart] 被调用, 天数:', days);
-        console.log('📊 [TPI.updateTrendChart] 执行时间:', new Date().toLocaleString());
         return originalUpdateTrendChart.call(this, days);
     };
 }
@@ -26709,8 +26500,6 @@ if (window.TPI && window.TPI.updateTrendChart) {
 if (window.TPI && window.TPI.generateMonthlyReport) {
     const originalGenerateMonthlyReport = window.TPI.generateMonthlyReport;
     window.TPI.generateMonthlyReport = function() {
-        console.log('📝 [TPI.generateMonthlyReport] 被调用');
-        console.log('📝 [TPI.generateMonthlyReport] 执行时间:', new Date().toLocaleString());
         return originalGenerateMonthlyReport.call(this);
     };
 }
@@ -26719,8 +26508,6 @@ if (window.TPI && window.TPI.generateMonthlyReport) {
 window.TPIAdvanced = {
     // 数据对比功能
     openComparison: function() {
-        console.log('📊 [TPIAdvanced.openComparison] 数据对比功能被调用');
-        console.log('📊 [TPIAdvanced.openComparison] 执行时间:', new Date().toLocaleString());
         
         try {
             // 创建对比分析模态框
@@ -26770,7 +26557,7 @@ window.TPIAdvanced = {
             document.getElementById('compare-end-date').value = today.toISOString().split('T')[0];
             document.getElementById('compare-start-date').value = weekAgo.toISOString().split('T')[0];
             
-            console.log('✅ [TPIAdvanced.openComparison] 对比分析窗口已打开');
+            
         } catch (error) {
             console.error('❌ [TPIAdvanced.openComparison] 打开失败:', error);
             alert('❌ 打开对比分析失败: ' + error.message);
@@ -29078,7 +28865,6 @@ try{
       document.querySelectorAll('input[type="range"]').forEach(input => {
         if (!isInExcludedSection(input)) {
           input.value = input.min || 0;
-          try { input.dispatchEvent(new Event('input', { bubbles: true })); } catch(e) {}
           clearedCount++;
         }
       });
@@ -29087,7 +28873,6 @@ try{
       document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
         if (!isInExcludedSection(checkbox)) {
           checkbox.checked = false;
-          try { checkbox.dispatchEvent(new Event('change', { bubbles: true })); } catch(e) {}
           clearedCount++;
         }
       });
@@ -29108,7 +28893,7 @@ try{
         }
       });
 
-      console.log(`  ✓ 已清空 ${clearedCount} 个表单输入`);
+      console.log('🧹 [清空今日] 操作完成');
 
       // ============ 第二步：清空动态生成的分数和评级显示 ============
       let dynamicCount = 0;
@@ -29159,7 +28944,6 @@ try{
       });
 
       console.log(`  ✓ 已清空 ${dynamicCount} 个动态生成的显示元素`);
-
       // ============ 第三步：清空localStorage缓存 ============
       __tpi_ls_remove(`tpi_data_${dateKey}`);
       __tpi_ls_remove(`tpi_temp_snapshot_${dateKey}`);
@@ -29170,20 +28954,15 @@ try{
 
       try{ if (typeof window.updateStorageIndicator === 'function') window.updateStorageIndicator(); }catch(e){}
 
-      console.log(`  ✓ 已清空localStorage缓存`);
-
       // ============ 第四步：重新触发计算（将所有分数重置为0） ============
       try {
         if (typeof window.RealtimeCalculator !== 'undefined' && 
             typeof window.RealtimeCalculator.recalculate === 'function') {
           setTimeout(() => {
             window.RealtimeCalculator.recalculate();
-            console.log('  ✓ 已重新计算分数（全部重置为0）');
           }, 100);
         }
-      } catch(e) {
-        console.log('  ⚠️ 分数重算跳过（RealtimeCalculator未就绪）');
-      }
+      } catch(e) {}
 
       // ============ 第五步：显示成功提示 ============
       const totalCleared = clearedCount + dynamicCount;
@@ -29202,8 +28981,6 @@ try{
           alert(`✅ 已清空 ${dateKey} 的所有内容\n共清空 ${totalCleared} 项\n（不含未来事件雷达/杂事记录）`);
         }
       }catch(e){}
-
-      console.log(`✅ [清空今日] 全部完成 - 共清空 ${totalCleared} 项`);
       
     }catch(e){
       console.error('⛔ clearTodayCache failed:', e);
@@ -30406,7 +30183,6 @@ try{
 <script>
 (function() {
     'use strict';
-    console.log('🔧 [修复补丁] 开始加载第22版修复补丁...');
 
     // ===== 修复1: 确保ScoreDashboard正确更新FLI分数 =====
     if (window.ScoreDashboard) {
@@ -30436,7 +30212,6 @@ try{
                 // 更新评级
                 this.updateRating(tpiTotal);
                 
-                console.log(`✅ [分数看板] 更新成功: AMI=${amiScore}, BCM=${bcmScore}, LOG=${logisticsScore}, HSM=${hsmScore}, FLI=${fliScore}, BONUS=${bonusScore}, Total=${tpiTotal}`);
             } catch (error) {
                 console.error('❌ [分数看板] 更新失败:', error);
             }
@@ -30445,7 +30220,6 @@ try{
         // 立即更新一次
         setTimeout(() => {
             window.ScoreDashboard.update();
-            console.log('✅ [修复补丁] 分数看板已更新');
         }, 500);
     }
 
@@ -30489,7 +30263,6 @@ try{
                         }
                     });
                 });
-                console.log(`✅ [分数监听] 已绑定监听器到: ${id}`);
             }
         });
     });
@@ -30501,8 +30274,7 @@ try{
         }
     }, 3000);
 
-    console.log('✅ [修复补丁] 第22版修复补丁加载完成');
-})();
+})();})();
 </script>
 
 <script>
@@ -32057,8 +31829,6 @@ console.log('✅ [TPI优化] 函数增强包装器已加载');
     
     // 启动
     init();
-    
-    console.log('✅ [ScoreDashboard] 分数看板已加载');
     
 })();
 
