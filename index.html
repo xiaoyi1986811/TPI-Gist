@@ -1054,8 +1054,7 @@ window.__tpi_legacy_loadTpiData_1 = function () {
           lines.push('|---------|---------|');
           tableItems.forEach(function(row) {
             var lbl = row.label.replace(/\|/g, '｜'); // escape pipes
-            var v = String(row.val).replace(/\|/g, '｜').replace(/
-/g, ' ').slice(0, 200);
+            var v = String(row.val).replace(/\|/g, '｜').replace(/[\r\n]+/g, ' ').slice(0, 200);
             lines.push('| ' + lbl + ' | ' + v + ' |');
           });
           lines.push('');
