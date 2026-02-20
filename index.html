@@ -2,6 +2,22 @@
 
 <html lang="zh-CN">
 <head>
+  <script>
+    // 抑制浏览器扩展引发的 unhandledrejection 错误（如 usage-monitoring.js、Zotero 等）
+    // 这些错误来自第三方扩展，与页面功能无关
+    (function(){
+      window.addEventListener('unhandledrejection', function(e){
+        try{
+          var msg = (e && e.reason && e.reason.message) ? e.reason.message : String(e && e.reason || '');
+          if (msg.indexOf('Could not establish connection') !== -1 ||
+              msg.indexOf('Receiving end does not exist') !== -1) {
+            e.preventDefault();
+            return;
+          }
+        }catch(err){}
+      }, true);
+    })();
+  </script>
 
 <script>
 // === IndexedDB 配额初始化（替代 localStorage 5MB 基准）===
@@ -57,7 +73,7 @@
     if (!window.__tpi_console_rate_limited) {
       window.__tpi_console_rate_limited = true;
 
-      const LIMIT_PER_10S = 60;   // 10 秒内最多输出 60 条 log/info/debug
+      const LIMIT_PER_10S = 8;    // 10 秒内最多输出 8 条 log/info/debug（降噪优化）
       const WINDOW_MS = 10_000;
 
       const orig = {
@@ -93,6 +109,16 @@
       };
       console.info = function(...args){ if (shouldAllow()) orig.info(...args); };
       console.debug = function(...args){ if (shouldAllow()) orig.debug(...args); };
+      console.warn = function(...args){ if (shouldAllow()) orig.warn(...args); };
+
+      // 屏蔽浏览器扩展产生的"Could not establish connection"错误噪音
+      const _origError = console.error.bind(console);
+      console.error = function(...args){
+        const msg = args && args[0] ? String(args[0]) : '';
+        if (msg.indexOf('Could not establish connection') !== -1) return;
+        if (msg.indexOf('Receiving end does not exist') !== -1) return;
+        _origError(...args);
+      };
 
       // 暴露原始输出，便于排查（不在 UI 中使用）
       window.__tpi_console_raw = orig;
@@ -30959,28 +30985,12 @@ function parseGistFileContent(gistJson){
         return false;
       }
 
-      // --- write-back verify: PATCH 后回读确认（更稳，不改变存储结构） ---
+      /// 从 PATCH 响应中提取 updated_at（已移除额外 GET 验证请求，减少扩展错误循环）
       try{
-        const remoteUpdatedAt = (await resPatch.clone().json().catch(()=>null) || {}).updated_at || '';
-        if (remoteUpdatedAt) ssSet('tpi_gist_last_seen_updated_at', String(remoteUpdatedAt));
-      }catch(e){}
-      try{
-        const resVerify = await gistGet(token);
-        if (resVerify && resVerify.ok){
-          const vJson = await resVerify.json();
-          // 更新 last-seen（用于冲突提示）
-          try{
-            const updated = (vJson && vJson.updated_at) ? String(vJson.updated_at) : '';
-            if (updated) ssSet('tpi_gist_last_seen_updated_at', updated);
-          }catch(e){}
-          const vAll = parseGistFileContent(vJson);
-          const vDay = (vAll && vAll[username] && vAll[username][dateKey]) ? vAll[username][dateKey] : null;
-          if (!vDay){
-            // 不阻断业务，但提示用户手动验证
-            tpiShowMsg('tpi-sync-msg','⚠️ 已写入云端，但未能在回读中确认该日期数据（建议稍后点击“从云端下载”核对）', false);
-          }
-        }
-      }catch(e){}
+        const patchJson = await resPatch.clone().json().catch(()=>null);
+        const remoteUpdatedAt = (patchJson && patchJson.updated_at) ? String(patchJson.updated_at) : '';
+        if (remoteUpdatedAt) ssSet('tpi_gist_last_seen_updated_at', remoteUpdatedAt);
+      }catch(e){}      }catch(e){}
 
       // 生成保存摘要（便于核对）
       const savedDayData = (allData && allData[username] && allData[username][dateKey] && typeof allData[username][dateKey] === 'object')
