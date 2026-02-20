@@ -274,8 +274,8 @@
 
   /* ── 统一公开接口（兼容全站所有 __tpi_ls_* 调用） ── */
   window.__tpi_ls_get = function(key, defaultValue){
-    // 优先内存缓存（IndexedDB预载）
-    if(_memReady && Object.prototype.hasOwnProperty.call(_mem,key)){
+    // 优先内存缓存（IndexedDB预载；即使预载未完成也优先使用已写入_mem的键，如签到数据）
+    if(Object.prototype.hasOwnProperty.call(_mem,key)){
       var cv = _mem[key];
       return (cv!==null && cv!==undefined) ? cv : (defaultValue===undefined ? null : defaultValue);
     }
@@ -29579,8 +29579,22 @@ try{
       
       // 保存数据
       if (saveCheckInData(data)) {
-        // 更新显示
-        updateCheckInStatus();
+        // 直接用已知数据更新 UI（避免从存储重新读取时因缓存未就绪导致的显示异常）
+        const today2 = getTodayDateString();
+        const statusText2 = document.getElementById('checkin-status-text');
+        const streakDisplay2 = document.getElementById('checkin-streak-display');
+        const checkInBtn2 = document.getElementById('btn-daily-checkin');
+        if (statusText2) statusText2.textContent = '✅ 已签到';
+        if (streakDisplay2) streakDisplay2.textContent = streak;
+        if (checkInBtn2) {
+          checkInBtn2.textContent = '✅ 今日已签到';
+          checkInBtn2.disabled = true;
+          checkInBtn2.style.opacity = '0.6';
+          checkInBtn2.style.cursor = 'not-allowed';
+        }
+        updateCheckInCalendar();
+        // 同时调用完整更新（确保其他状态也正确）
+        setTimeout(function(){ try{ updateCheckInStatus(); }catch(e){} }, 100);
         
         // 显示成功消息
         let message = `🎉 签到成功！`;
