@@ -1054,7 +1054,8 @@ window.__tpi_legacy_loadTpiData_1 = function () {
           lines.push('|---------|---------|');
           tableItems.forEach(function(row) {
             var lbl = row.label.replace(/\|/g, '｜'); // escape pipes
-            var v = String(row.val).replace(/\|/g, '｜').replace(/[\r\n]+/g, ' ').slice(0, 200);
+            var v = String(row.val).replace(/\|/g, '｜').replace(/
+/g, ' ').slice(0, 200);
             lines.push('| ' + lbl + ' | ' + v + ' |');
           });
           lines.push('');
@@ -30835,13 +30836,7 @@ function parseGistFileContent(gistJson){
   // --- Public APIs: tpiSaveData / tpiLoadData ---
   // Gist 后端实现。
   window.tpiSaveData = async function(date, data){
-    /* ===== Hotfix: 防止“同步上传”重复触发导致冲突提示/确认框反复弹出 ===== */
-    if (window.__TPI_GIST_SAVE_INFLIGHT__) {
-      try{ tpiShowMsg('tpi-sync-msg','⏳ 正在同步到云端，请稍候…（已阻止重复触发）', false); }catch(e){}
-      return false;
-    }
-    window.__TPI_GIST_SAVE_INFLIGHT__ = true;
-const auth = ensureAuth({needToken:true});
+    const auth = ensureAuth({needToken:true});
     if (!auth) return false;
 
     const { username, gistId, token } = auth;
@@ -30872,43 +30867,39 @@ const auth = ensureAuth({needToken:true});
       try{
         const lastSeen = ssGet('tpi_gist_last_seen_updated_at','');
         const remoteUpdated = (gistJson && gistJson.updated_at) ? String(gistJson.updated_at) : '';
-
-        // ✅ Hotfix: 防抖/去重（避免同一次点击触发多次保存时重复弹出确认）
-        // - 若同一 remoteUpdated 已在本会话确认过，则直接继续
-        // - 若确认框已打开，则直接等待/跳过（避免并发导致循环弹窗）
-        const _suppressKey = '__tpi_gist_conflict_suppress_updated_at';
-        try{
-          if (window[_suppressKey] && remoteUpdated && String(window[_suppressKey]) === String(remoteUpdated)) {
-            // 已确认过该版本
-          } else if (window.__TPI_GIST_CONFLICT_PROMPT_OPEN__) {
-            // 已有提示框在展示：不再重复弹出
-          }
-        }catch(e){}
-
         // 若用户曾在本会话中下载/读取过云端，而云端更新时间已变化，则提示可能存在覆盖风险
-        if (lastSeen && remoteUpdated && lastSeen !== remoteUpdated
-            && !(window[_suppressKey] && remoteUpdated && String(window[_suppressKey]) === String(remoteUpdated))
-            && !window.__TPI_GIST_CONFLICT_PROMPT_OPEN__){
-          // ✅ Fix: 使用非阻塞的 showModal（Promise封装）替代 confirm()，避免页面卡住
+        // ✅ Fix: 使用 window.__tpi_conflict_confirmed 标志位，确保同一冲突版本只提示一次
+        const conflictKey = 'tpi_conflict_confirmed_' + remoteUpdated;
+        const alreadyConfirmed = window[conflictKey] === true;
+        if (lastSeen && remoteUpdated && lastSeen !== remoteUpdated && !alreadyConfirmed){
+          // 立即更新 lastSeen，防止重复弹窗（无论用户选择什么）
+          ssSet('tpi_gist_last_seen_updated_at', remoteUpdated);
+          // ✅ Fix: 使用内联自定义弹窗（Promise封装），彻底避免原生 confirm() 和重复弹窗问题
           const userConfirmed = await new Promise((resolve) => {
             try {
-              if (typeof window.showModal === 'function') {
-                try{ window.__TPI_GIST_CONFLICT_PROMPT_OPEN__ = true; }catch(e){}
-                window.showModal({
-                  type: 'warning',
-                  title: '云端数据冲突提示',
-                  message: '⚠️ 检测到云端数据在你上次读取后发生了更新，继续保存可能覆盖其它设备的更新。<br><br>是否继续保存到云端？',
-                  confirmText: '确定保存',
-                  cancelText: '取消',
-                  showCancel: true,
-                  showConfirm: true,
-                  onConfirm: () => { try{ window.__TPI_GIST_CONFLICT_PROMPT_OPEN__ = false; }catch(e){} try{ if(remoteUpdated) window[_suppressKey]=String(remoteUpdated); }catch(e){} resolve(true); },
-                  onCancel: () => { try{ window.__TPI_GIST_CONFLICT_PROMPT_OPEN__ = false; }catch(e){} resolve(false); }
-                });
-              } else {
-                // fallback: 直接继续保存，避免因 showModal 不可用而卡住
-                resolve(true);
-              }
+              // 创建自定义弹窗容器
+              const _overlay = document.createElement('div');
+              _overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:99999;';
+              const _box = document.createElement('div');
+              _box.style.cssText = 'background:#fff;border-radius:12px;padding:0;max-width:480px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);overflow:hidden;';
+              _box.innerHTML = '<div style="padding:20px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;gap:12px;"><span style="font-size:24px;">⚠️</span><h3 style="margin:0;font-size:17px;font-weight:600;color:#111827;">云端数据冲突提示</h3></div>'
+                + '<div style="padding:20px;font-size:14px;line-height:1.7;color:#374151;">检测到云端数据在你上次读取后已被更新，继续保存可能覆盖其它设备的更新。<br><br>是否继续保存到云端？</div>'
+                + '<div style="padding:15px 20px;border-top:1px solid #e5e7eb;display:flex;gap:10px;justify-content:flex-end;">'
+                + '<button id="_tpi_conflict_cancel" style="padding:9px 20px;border:1px solid #d1d5db;background:#fff;color:#6b7280;border-radius:8px;cursor:pointer;font-size:14px;font-weight:500;">取消</button>'
+                + '<button id="_tpi_conflict_confirm" style="padding:9px 20px;border:none;background:#f59e0b;color:#fff;border-radius:8px;cursor:pointer;font-size:14px;font-weight:500;">确定保存</button>'
+                + '</div>';
+              _overlay.appendChild(_box);
+              document.body.appendChild(_overlay);
+              let _resolved = false;
+              const _resolve = (val) => {
+                if (_resolved) return;
+                _resolved = true;
+                try { document.body.removeChild(_overlay); } catch(e) {}
+                resolve(val);
+              };
+              _box.querySelector('#_tpi_conflict_confirm').onclick = () => _resolve(true);
+              _box.querySelector('#_tpi_conflict_cancel').onclick = () => _resolve(false);
+              _overlay.onclick = (e) => { if (e.target === _overlay) _resolve(false); };
             } catch(modalErr) {
               resolve(true); // fallback: 继续保存
             }
@@ -30917,9 +30908,8 @@ const auth = ensureAuth({needToken:true});
             tpiShowMsg('tpi-sync-msg','ℹ️ 已取消保存（为避免覆盖云端更新）', false);
             return false;
           }
-          // 用户确认后立即更新 lastSeen 为当前云端时间，避免下次再次触发冲突提示
-          ssSet('tpi_gist_last_seen_updated_at', remoteUpdated);
-          try{ if(remoteUpdated) window[_suppressKey]=String(remoteUpdated); }catch(e){}
+          // 用户已确认：记录到 session 标志位，防止同一云端版本多次弹窗
+          window[conflictKey] = true;
         }
       }catch(e){}
 
@@ -31065,13 +31055,6 @@ const auth = ensureAuth({needToken:true});
       console.error('[Gist Save] failed:', err);
       tpiShowMsg('tpi-sync-msg',`❌ 保存失败，请检查网络：${err.message || err}`, true);
       return false;
-    }finally{
-      window.__TPI_GIST_SAVE_INFLIGHT__ = false;
-    }
-  };
-
-  // Gist 后端实现。
-  PI_GIST_SAVE_INFLIGHT__ = false;
     }
   };
 
