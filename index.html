@@ -30868,44 +30868,26 @@ function parseGistFileContent(gistJson){
         const lastSeen = ssGet('tpi_gist_last_seen_updated_at','');
         const remoteUpdated = (gistJson && gistJson.updated_at) ? String(gistJson.updated_at) : '';
         // 若用户曾在本会话中下载/读取过云端，而云端更新时间已变化，则提示可能存在覆盖风险
-        // ✅ Fix: 使用 window.__tpi_conflict_confirmed 标志位，确保同一冲突版本只提示一次
-        const conflictKey = 'tpi_conflict_confirmed_' + remoteUpdated;
-        const alreadyConfirmed = window[conflictKey] === true;
-        // ✅ Fix: 若上传正在进行（如快照内部静默推送），跳过冲突检查，避免重入
-        if (window.__TPI_UPLOAD_IN_PROGRESS__) {
-          // 静默推送路径：直接跳过冲突检测，继续保存
-        } else
-        if (lastSeen && remoteUpdated && lastSeen !== remoteUpdated && !alreadyConfirmed){
-          // ✅ 设置全局上传锁，防止弹窗等待期间其他自动触发再次进入冲突检查
-          window.__TPI_UPLOAD_IN_PROGRESS__ = true;
-          // 立即更新 lastSeen，防止重复弹窗（无论用户选择什么）
-          ssSet('tpi_gist_last_seen_updated_at', remoteUpdated);
-          // ✅ Fix: 使用内联自定义弹窗（Promise封装），彻底避免原生 confirm() 和重复弹窗问题
+        if (lastSeen && remoteUpdated && lastSeen !== remoteUpdated){
+          // ✅ Fix: 使用非阻塞的 showModal（Promise封装）替代 confirm()，避免页面卡住
           const userConfirmed = await new Promise((resolve) => {
             try {
-              // 创建自定义弹窗容器
-              const _overlay = document.createElement('div');
-              _overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:99999;';
-              const _box = document.createElement('div');
-              _box.style.cssText = 'background:#fff;border-radius:12px;padding:0;max-width:480px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);overflow:hidden;';
-              _box.innerHTML = '<div style="padding:20px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;gap:12px;"><span style="font-size:24px;">⚠️</span><h3 style="margin:0;font-size:17px;font-weight:600;color:#111827;">云端数据冲突提示</h3></div>'
-                + '<div style="padding:20px;font-size:14px;line-height:1.7;color:#374151;">检测到云端数据在你上次读取后已被更新，继续保存可能覆盖其它设备的更新。<br><br>是否继续保存到云端？</div>'
-                + '<div style="padding:15px 20px;border-top:1px solid #e5e7eb;display:flex;gap:10px;justify-content:flex-end;">'
-                + '<button id="_tpi_conflict_cancel" style="padding:9px 20px;border:1px solid #d1d5db;background:#fff;color:#6b7280;border-radius:8px;cursor:pointer;font-size:14px;font-weight:500;">取消</button>'
-                + '<button id="_tpi_conflict_confirm" style="padding:9px 20px;border:none;background:#f59e0b;color:#fff;border-radius:8px;cursor:pointer;font-size:14px;font-weight:500;">确定保存</button>'
-                + '</div>';
-              _overlay.appendChild(_box);
-              document.body.appendChild(_overlay);
-              let _resolved = false;
-              const _resolve = (val) => {
-                if (_resolved) return;
-                _resolved = true;
-                try { document.body.removeChild(_overlay); } catch(e) {}
-                resolve(val);
-              };
-              _box.querySelector('#_tpi_conflict_confirm').onclick = () => _resolve(true);
-              _box.querySelector('#_tpi_conflict_cancel').onclick = () => _resolve(false);
-              _overlay.onclick = (e) => { if (e.target === _overlay) _resolve(false); };
+              if (typeof window.showModal === 'function') {
+                window.showModal({
+                  type: 'warning',
+                  title: '云端数据冲突提示',
+                  message: '⚠️ 检测到云端数据在你上次读取后发生了更新，继续保存可能覆盖其它设备的更新。<br><br>是否继续保存到云端？',
+                  confirmText: '确定保存',
+                  cancelText: '取消',
+                  showCancel: true,
+                  showConfirm: true,
+                  onConfirm: () => resolve(true),
+                  onCancel: () => resolve(false)
+                });
+              } else {
+                // fallback: 直接继续保存，避免因 showModal 不可用而卡住
+                resolve(true);
+              }
             } catch(modalErr) {
               resolve(true); // fallback: 继续保存
             }
@@ -30914,12 +30896,10 @@ function parseGistFileContent(gistJson){
             tpiShowMsg('tpi-sync-msg','ℹ️ 已取消保存（为避免覆盖云端更新）', false);
             return false;
           }
-          // 用户已确认：记录到 session 标志位，防止同一云端版本多次弹窗
-          window[conflictKey] = true;
-          // ✅ 解除全局上传锁
-          window.__TPI_UPLOAD_IN_PROGRESS__ = false;
+          // 用户确认后立即更新 lastSeen 为当前云端时间，避免下次再次触发冲突提示
+          ssSet('tpi_gist_last_seen_updated_at', remoteUpdated);
         }
-      }catch(e){ window.__TPI_UPLOAD_IN_PROGRESS__ = false; }
+      }catch(e){}
 
       const allData = parseGistFileContent(gistJson);
 
@@ -31321,12 +31301,6 @@ function parseGistFileContent(gistJson){
   };
 
 window.tpiSaveToday = async function(date){
-    // ✅ Fix: 防止并发重入（弹窗等待期间的自动触发、快照内部调用等）
-    if (window.__TPI_SAVE_TODAY_RUNNING__) {
-      console.log('[tpiSaveToday] 已有上传任务进行中，跳过本次调用');
-      return false;
-    }
-    window.__TPI_SAVE_TODAY_RUNNING__ = true;
     try{
       const dateKey = (date && String(date).trim()) ? String(date).trim() : getSelectedDate();
       
@@ -31353,9 +31327,6 @@ window.tpiSaveToday = async function(date){
       console.error('[tpiSaveToday] failed:', err);
       tpiShowMsg('tpi-sync-msg',`❌ 保存失败，请检查网络：${err.message || err}`, true);
       return false;
-    }finally{
-      // ✅ Fix: 无论成功/失败/取消，都释放重入锁
-      window.__TPI_SAVE_TODAY_RUNNING__ = false;
     }
   };
 
@@ -32066,401 +32037,6 @@ console.log('✅ [TPI优化] 函数增强包装器已加载');
 
 </script>
 
-<!-- ★★★ Git驱动版：快照同步系统 (IndexedDB专属存储 + Gist云端通道) ★★★ -->
-<script>
-(function(){
-'use strict';
-
-/* ============================================================
-   TPI Snapshot System — Git驱动版
-   · 快照数据存入专属 IndexedDB (TPI_Snapshots)，独立于主存储
-   · 同时在 localStorage 保留元数据索引，降级时可查
-   · 恢复时强制触发重算，确保分数/评级实时刷新
-   · 支持云端通道：每次创建快照后静默推送 Gist（不阻塞）
-   · 暴露 window.TPISnapshotSystem，供按钮/自动调用
-============================================================ */
-
-/* ── IndexedDB (快照专属库) ── */
-var _SDB_NAME  = 'TPI_Snapshots';
-var _SDB_STORE = 'snaps';
-var _sdb       = null;
-
-function _openSnapDB(){
-  if(_sdb) return Promise.resolve(_sdb);
-  return new Promise(function(resolve, reject){
-    try{
-      var req = indexedDB.open(_SDB_NAME, 1);
-      req.onupgradeneeded = function(){
-        try{
-          var db = req.result;
-          if(!db.objectStoreNames.contains(_SDB_STORE)){
-            var st = db.createObjectStore(_SDB_STORE, {keyPath:'id'});
-            st.createIndex('byDate','date',{unique:false});
-          }
-        }catch(e){}
-      };
-      req.onsuccess = function(){ _sdb = req.result; resolve(_sdb); };
-      req.onerror   = function(){ reject(req.error); };
-    }catch(e){ reject(e); }
-  });
-}
-
-/* ── 工具函数 ── */
-function _today(){
-  try{
-    var di = document.getElementById('date-input');
-    if(di && di.value) return di.value;
-  }catch(e){}
-  var d = new Date();
-  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-}
-
-function _checksum(obj){
-  try{
-    var s = JSON.stringify(obj); var h = 0;
-    for(var i=0;i<s.length;i++) h = (Math.imul(31,h)+s.charCodeAt(i))|0;
-    return (h>>>0).toString(16).padStart(8,'0');
-  }catch(e){ return 'err'; }
-}
-
-function _collectData(){
-  // 先强制重算，确保分数已写入DOM
-  try{ if(typeof window.__tpi_triggerRecalc==='function') window.__tpi_triggerRecalc(); }catch(e){}
-  // 等80ms让异步更新完成（内部通过await调用）
-  // 收集：优先 collectDailyData，回退 collectFormData
-  try{
-    if(typeof window.collectDailyData==='function'){
-      var obj = window.collectDailyData();
-      if(obj){ var k=Object.keys(obj)[0]; if(k) return obj[k]; }
-    }
-  }catch(e){}
-  try{
-    if(typeof window.collectFormData==='function') return window.collectFormData();
-  }catch(e){}
-  return null;
-}
-
-function _restoreUI(data){
-  try{
-    if(typeof window.restoreUIFromData==='function'){ window.restoreUIFromData(data); return; }
-    if(typeof window.restoreFormData==='function'){ window.restoreFormData(data); return; }
-  }catch(e){}
-}
-
-function _triggerRecalcAfterRestore(){
-  setTimeout(function(){
-    try{ if(typeof window.__tpi_triggerRecalc==='function') window.__tpi_triggerRecalc(); }catch(e){}
-    try{ if(typeof window.TPI!=='undefined' && typeof window.TPI.calculateSystem==='function') window.TPI.calculateSystem(); }catch(e){}
-  }, 150);
-}
-
-/* ── IndexedDB CRUD ── */
-function _idbSave(snap){
-  return _openSnapDB().then(function(db){
-    return new Promise(function(res,rej){
-      try{
-        var tx = db.transaction([_SDB_STORE],'readwrite');
-        tx.objectStore(_SDB_STORE).put(snap);
-        tx.oncomplete = res; tx.onerror = function(){ rej(tx.error); };
-      }catch(e){ rej(e); }
-    });
-  });
-}
-
-function _idbList(date){
-  return _openSnapDB().then(function(db){
-    return new Promise(function(res,rej){
-      try{
-        var tx  = db.transaction([_SDB_STORE],'readonly');
-        var idx = tx.objectStore(_SDB_STORE).index('byDate');
-        var req = idx.getAll(date);
-        req.onsuccess = function(){ res(req.result||[]); };
-        req.onerror   = function(){ rej(req.error); };
-      }catch(e){ rej(e); }
-    });
-  }).catch(function(){ return []; });
-}
-
-function _idbGet(id){
-  return _openSnapDB().then(function(db){
-    return new Promise(function(res,rej){
-      try{
-        var tx  = db.transaction([_SDB_STORE],'readonly');
-        var req = tx.objectStore(_SDB_STORE).get(id);
-        req.onsuccess = function(){ res(req.result||null); };
-        req.onerror   = function(){ rej(req.error); };
-      }catch(e){ rej(e); }
-    });
-  }).catch(function(){ return null; });
-}
-
-function _idbDel(id){
-  return _openSnapDB().then(function(db){
-    return new Promise(function(res,rej){
-      try{
-        var tx = db.transaction([_SDB_STORE],'readwrite');
-        tx.objectStore(_SDB_STORE).delete(id);
-        tx.oncomplete = res; tx.onerror = function(){ rej(tx.error); };
-      }catch(e){ rej(e); }
-    });
-  }).catch(function(){});
-}
-
-/* ── 快照管理器主体 ── */
-window.TPISnapshotSystem = {
-
-  maxSnapshots: 20,
-
-  /* 创建快照 */
-  createSnapshot: async function(description){
-    description = description || '手动快照';
-    try{
-      // 强制重算 + 等待
-      try{ if(typeof window.__tpi_triggerRecalc==='function') window.__tpi_triggerRecalc(); }catch(e){}
-      await new Promise(function(r){ setTimeout(r, 80); });
-
-      var data = _collectData();
-      if(!data){ console.warn('[Snapshot] 无法收集数据'); return {success:false,error:'无法收集数据'}; }
-
-      var date = _today();
-      var snap = {
-        id:          'snap_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
-        date:        date,
-        timestamp:   new Date().toISOString(),
-        description: description,
-        checksum:    _checksum(data),
-        data:        data
-      };
-
-      // 1. 写 IndexedDB（主存储）
-      await _idbSave(snap);
-
-      // 2. 写 localStorage 元数据索引（降级读取用）
-      try{
-        var lsKey  = 'tpi_snapshots_'+date;
-        var lsMeta = JSON.parse(window.__tpi_ls_get(lsKey)||'[]');
-        lsMeta.unshift({id:snap.id, timestamp:snap.timestamp, description:snap.description, checksum:snap.checksum});
-        if(lsMeta.length>this.maxSnapshots) lsMeta=lsMeta.slice(0,this.maxSnapshots);
-        window.__tpi_ls_set(lsKey, JSON.stringify(lsMeta));
-        // 快照数据本身也写 localStorage（通过__tpi_ls_set已同时写IndexedDB主镜像）
-        window.__tpi_ls_set('tpi_snap_data_'+snap.id, JSON.stringify(snap.data));
-      }catch(e){ console.warn('[Snapshot] localStorage索引写入失败:', e); }
-
-      // 3. 清理旧快照（IndexedDB）
-      await this._pruneOld(date);
-
-      // 4. 静默推送 Gist（不阻塞，失败不报错）
-      // ✅ Fix: 防止递归死循环 —— createSnapshot 内部绝不再触发快照，用原始函数直接上传
-      try{
-        if(typeof window.__tpiSaveToday_orig==='function' && !window.__TPI_SNAPSHOT_UPLOADING__){
-          window.__TPI_SNAPSHOT_UPLOADING__ = true;
-          window.__tpiSaveToday_orig().catch(function(){}).finally(function(){ window.__TPI_SNAPSHOT_UPLOADING__ = false; });
-        }
-      }catch(e){ window.__TPI_SNAPSHOT_UPLOADING__ = false; }
-
-      console.log('[Snapshot] 创建成功:', snap.id);
-      this._toast('📸 快照已保存', 'success');
-      return {success:true, snapshot:snap};
-
-    }catch(err){
-      console.error('[Snapshot] 创建失败:', err);
-      this._toast('❌ 快照创建失败: '+err.message, 'error');
-      return {success:false, error:err.message};
-    }
-  },
-
-  /* 列出某日快照 */
-  listSnapshots: async function(date){
-    date = date || _today();
-    try{
-      var list = await _idbList(date);
-      if(list.length>0) return list.sort(function(a,b){ return b.timestamp.localeCompare(a.timestamp); });
-    }catch(e){}
-    // 降级：localStorage元数据
-    try{
-      var raw = window.__tpi_ls_get('tpi_snapshots_'+date);
-      return raw ? JSON.parse(raw) : [];
-    }catch(e){ return []; }
-  },
-
-  /* 恢复快照 */
-  restoreSnapshot: async function(snapId){
-    try{
-      var snap = await _idbGet(snapId);
-      var data = snap ? snap.data : null;
-      // 降级：localStorage
-      if(!data){
-        try{
-          var raw = window.__tpi_ls_get('tpi_snap_data_'+snapId);
-          if(raw) data = JSON.parse(raw);
-        }catch(e){}
-      }
-      if(!data){ alert('❌ 快照数据不存在'); return false; }
-
-      _restoreUI(data);
-      _triggerRecalcAfterRestore();
-
-      console.log('[Snapshot] 恢复成功:', snapId);
-      this._toast('✅ 快照已恢复', 'success');
-      return true;
-    }catch(err){
-      console.error('[Snapshot] 恢复失败:', err);
-      alert('❌ 快照恢复失败: '+err.message);
-      return false;
-    }
-  },
-
-  /* 删除快照 */
-  deleteSnapshot: async function(snapId){
-    try{
-      await _idbDel(snapId);
-      try{
-        window.__tpi_ls_remove('tpi_snap_data_'+snapId);
-        // 从元数据列表移除
-        var date = _today();
-        var lsKey = 'tpi_snapshots_'+date;
-        var list  = JSON.parse(window.__tpi_ls_get(lsKey)||'[]');
-        window.__tpi_ls_set(lsKey, JSON.stringify(list.filter(function(s){ return s.id!==snapId; })));
-      }catch(e){}
-      return true;
-    }catch(e){ return false; }
-  },
-
-  /* 自动快照（云端上传前调用） */
-  autoSnapshot: async function(){
-    return this.createSnapshot('自动快照-上传前');
-  },
-
-  /* 清理旧快照（保留最新N条） */
-  _pruneOld: async function(date){
-    try{
-      var list = await _idbList(date);
-      list.sort(function(a,b){ return b.timestamp.localeCompare(a.timestamp); });
-      var del  = list.slice(this.maxSnapshots);
-      for(var i=0;i<del.length;i++) await _idbDel(del[i].id);
-    }catch(e){}
-  },
-
-  /* 通知提示（兼容多种 toast 实现） */
-  _toast: function(msg, type){
-    try{
-      var fn = window.tpiToast||window.toast||window.TPIToast;
-      if(fn && typeof fn==='function'){ fn(msg, type||'info'); return; }
-      if(fn && typeof fn.success==='function'){
-        type==='error' ? fn.error(msg) : fn.success(msg); return;
-      }
-    }catch(e){}
-    // 最后兜底：短暂横幅
-    try{
-      var b = document.createElement('div');
-      b.textContent = msg;
-      b.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:999999;'
-        +'background:'+(type==='error'?'#ef4444':'#10b981')+';color:#fff;padding:10px 20px;'
-        +'border-radius:8px;font-size:14px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.2);';
-      document.body.appendChild(b);
-      setTimeout(function(){ try{ b.remove(); }catch(e){} }, 2500);
-    }catch(e){}
-  },
-
-  /* 显示管理界面 */
-  showSnapshotManager: async function(){
-    try{
-      var date  = _today();
-      var snaps = await this.listSnapshots(date);
-      var self  = this;
-
-      var rows = snaps.length>0 ? snaps.map(function(s){
-        return '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid #e2e8f0;'
-          +'border-radius:10px;margin-bottom:8px;">'
-          +'<div style="flex:1;min-width:0;">'
-          +'<div style="font-weight:600;font-size:13px;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+(s.description||'快照')+'</div>'
-          +'<div style="font-size:11px;color:#94a3b8;margin-top:2px;">'+new Date(s.timestamp).toLocaleString('zh-CN')+' · '+((s.checksum||'').slice(0,8))+'</div>'
-          +'</div>'
-          +'<button onclick="TPISnapshotSystem.restoreSnapshot(\''+s.id+'\').then(function(){var m=document.getElementById(\'_tpi_snap_modal\');if(m)m.remove();})" '
-          +'style="padding:5px 12px;background:#3b82f6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;">恢复</button>'
-          +'<button onclick="if(confirm(\'确定删除此快照？\'))TPISnapshotSystem.deleteSnapshot(\''+s.id+'\').then(function(){TPISnapshotSystem.showSnapshotManager();});" '
-          +'style="padding:5px 10px;background:#fee2e2;color:#ef4444;border:none;border-radius:6px;cursor:pointer;font-size:12px;white-space:nowrap;">删除</button>'
-          +'</div>';
-      }).join('')
-      : '<p style="text-align:center;color:#94a3b8;padding:24px 0;font-size:14px;">暂无快照</p>';
-
-      var old = document.getElementById('_tpi_snap_modal');
-      if(old) old.remove();
-
-      var m = document.createElement('div');
-      m.id = '_tpi_snap_modal';
-      m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999999;'
-        +'display:flex;align-items:center;justify-content:center;padding:16px;';
-      m.innerHTML = '<div style="background:#fff;border-radius:16px;width:100%;max-width:500px;max-height:80vh;'
-        +'display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25);">'
-        +'<div style="padding:16px 20px;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center;">'
-        +'<h3 style="margin:0;font-size:16px;font-weight:700;color:#1e293b;">📸 快照管理 · '+date+'</h3>'
-        +'<button onclick="document.getElementById(\'_tpi_snap_modal\').remove()" '
-        +'style="background:none;border:none;font-size:20px;cursor:pointer;color:#94a3b8;line-height:1;">✕</button>'
-        +'</div>'
-        +'<div style="overflow-y:auto;flex:1;padding:16px 20px;">'+rows+'</div>'
-        +'<div style="padding:12px 20px;border-top:1px solid #f1f5f9;display:flex;gap:8px;">'
-        +'<button onclick="var d=prompt(\'快照描述（可选）:\');TPISnapshotSystem.createSnapshot(d||\'手动快照\').then(function(){TPISnapshotSystem.showSnapshotManager();});" '
-        +'style="flex:1;padding:9px;background:linear-gradient(135deg,#8b5cf6,#6d28d9);color:#fff;border:none;'
-        +'border-radius:8px;cursor:pointer;font-weight:700;font-size:13px;">📸 新建快照</button>'
-        +'<button onclick="document.getElementById(\'_tpi_snap_modal\').remove()" '
-        +'style="padding:9px 16px;background:#f1f5f9;color:#475569;border:none;border-radius:8px;cursor:pointer;font-size:13px;">关闭</button>'
-        +'</div>'
-        +'</div>';
-      document.body.appendChild(m);
-      m.addEventListener('click', function(e){ if(e.target===m) m.remove(); });
-    }catch(err){ console.error('[Snapshot] 管理界面失败:', err); }
-  }
-};
-
-/* ── 云端上传前自动快照 ── */
-(function(){
-  var _orig = window.tpiSaveToday;
-  if(typeof _orig==='function'){
-    // ✅ Fix: 保存原始函数引用，供 createSnapshot 内部静默上传使用（避免递归）
-    window.__tpiSaveToday_orig = _orig;
-    window.__TPI_SNAPSHOT_UPLOADING__ = false;
-    window.tpiSaveToday = async function(){
-      // ✅ Fix: 若是 createSnapshot 内部触发的静默上传，直接走原始函数，不再创建快照（防止递归）
-      if(window.__TPI_SNAPSHOT_UPLOADING__) return _orig.apply(this, arguments);
-      // ✅ Fix: 若主上传已在进行中（如用户点了上传，弹窗等待时），跳过快照，直接走原始函数
-      if(window.__TPI_SAVE_TODAY_RUNNING__) return _orig.apply(this, arguments);
-      try{ window.TPISnapshotSystem.createSnapshot('自动快照-上传前').catch(function(){}); }catch(e){}
-      return _orig.apply(this, arguments);
-    };
-    console.log('[Snapshot] 已挂接 tpiSaveToday 自动快照（已修复防递归）');
-  }
-})();
-
-/* ── 注入"📸快照"按钮到页面同步区 ── */
-(function(){
-  function _inject(){
-    if(document.getElementById('_tpi_snap_btn')) return;
-    // 寻找保存/同步按钮
-    var anchor = document.getElementById('save-btn')
-               || document.querySelector('[onclick*="tpiSaveToday"],[onclick*="SaveToday"],[onclick*="upload"],[id*="save"]');
-    if(!anchor || !anchor.parentElement) return;
-    var btn = document.createElement('button');
-    btn.id   = '_tpi_snap_btn';
-    btn.type = 'button';
-    btn.textContent = '📸 快照';
-    btn.style.cssText = 'padding:8px 16px;background:linear-gradient(135deg,#8b5cf6,#6d28d9);'
-      +'color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:13px;'
-      +'margin-left:8px;box-shadow:0 2px 8px rgba(109,40,217,.25);vertical-align:middle;';
-    btn.onclick = function(){ window.TPISnapshotSystem.showSnapshotManager(); };
-    anchor.parentElement.insertBefore(btn, anchor.nextSibling);
-    console.log('[Snapshot] 快照按钮已注入');
-  }
-  if(document.readyState==='loading'){
-    document.addEventListener('DOMContentLoaded', function(){ setTimeout(_inject, 1500); }, {once:true});
-  }else{
-    setTimeout(_inject, 1500);
-  }
-})();
-
-console.log('✅ [Snapshot] Git驱动版快照系统已加载 — IndexedDB专属库 + localStorage备索引 + Gist云端通道');
-})();
-</script>
 
 <script>
 /* ================================================================
