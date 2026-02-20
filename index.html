@@ -30836,7 +30836,13 @@ function parseGistFileContent(gistJson){
   // --- Public APIs: tpiSaveData / tpiLoadData ---
   // Gist 后端实现。
   window.tpiSaveData = async function(date, data){
-    const auth = ensureAuth({needToken:true});
+    /* ===== Hotfix: 防止“同步上传”重复触发导致冲突提示/确认框反复弹出 ===== */
+    if (window.__TPI_GIST_SAVE_INFLIGHT__) {
+      try{ tpiShowMsg('tpi-sync-msg','⏳ 正在同步到云端，请稍候…（已阻止重复触发）', false); }catch(e){}
+      return false;
+    }
+    window.__TPI_GIST_SAVE_INFLIGHT__ = true;
+const auth = ensureAuth({needToken:true});
     if (!auth) return false;
 
     const { username, gistId, token } = auth;
@@ -30867,12 +30873,28 @@ function parseGistFileContent(gistJson){
       try{
         const lastSeen = ssGet('tpi_gist_last_seen_updated_at','');
         const remoteUpdated = (gistJson && gistJson.updated_at) ? String(gistJson.updated_at) : '';
+
+        // ✅ Hotfix: 防抖/去重（避免同一次点击触发多次保存时重复弹出确认）
+        // - 若同一 remoteUpdated 已在本会话确认过，则直接继续
+        // - 若确认框已打开，则直接等待/跳过（避免并发导致循环弹窗）
+        const _suppressKey = '__tpi_gist_conflict_suppress_updated_at';
+        try{
+          if (window[_suppressKey] && remoteUpdated && String(window[_suppressKey]) === String(remoteUpdated)) {
+            // 已确认过该版本
+          } else if (window.__TPI_GIST_CONFLICT_PROMPT_OPEN__) {
+            // 已有提示框在展示：不再重复弹出
+          }
+        }catch(e){}
+
         // 若用户曾在本会话中下载/读取过云端，而云端更新时间已变化，则提示可能存在覆盖风险
-        if (lastSeen && remoteUpdated && lastSeen !== remoteUpdated){
+        if (lastSeen && remoteUpdated && lastSeen !== remoteUpdated
+            && !(window[_suppressKey] && remoteUpdated && String(window[_suppressKey]) === String(remoteUpdated))
+            && !window.__TPI_GIST_CONFLICT_PROMPT_OPEN__){
           // ✅ Fix: 使用非阻塞的 showModal（Promise封装）替代 confirm()，避免页面卡住
           const userConfirmed = await new Promise((resolve) => {
             try {
               if (typeof window.showModal === 'function') {
+                try{ window.__TPI_GIST_CONFLICT_PROMPT_OPEN__ = true; }catch(e){}
                 window.showModal({
                   type: 'warning',
                   title: '云端数据冲突提示',
@@ -30881,8 +30903,8 @@ function parseGistFileContent(gistJson){
                   cancelText: '取消',
                   showCancel: true,
                   showConfirm: true,
-                  onConfirm: () => resolve(true),
-                  onCancel: () => resolve(false)
+                  onConfirm: () => { try{ window.__TPI_GIST_CONFLICT_PROMPT_OPEN__ = false; }catch(e){} try{ if(remoteUpdated) window[_suppressKey]=String(remoteUpdated); }catch(e){} resolve(true); },
+                  onCancel: () => { try{ window.__TPI_GIST_CONFLICT_PROMPT_OPEN__ = false; }catch(e){} resolve(false); }
                 });
               } else {
                 // fallback: 直接继续保存，避免因 showModal 不可用而卡住
@@ -30898,6 +30920,7 @@ function parseGistFileContent(gistJson){
           }
           // 用户确认后立即更新 lastSeen 为当前云端时间，避免下次再次触发冲突提示
           ssSet('tpi_gist_last_seen_updated_at', remoteUpdated);
+          try{ if(remoteUpdated) window[_suppressKey]=String(remoteUpdated); }catch(e){}
         }
       }catch(e){}
 
@@ -31043,6 +31066,13 @@ function parseGistFileContent(gistJson){
       console.error('[Gist Save] failed:', err);
       tpiShowMsg('tpi-sync-msg',`❌ 保存失败，请检查网络：${err.message || err}`, true);
       return false;
+    }finally{
+      window.__TPI_GIST_SAVE_INFLIGHT__ = false;
+    }
+  };
+
+  // Gist 后端实现。
+  PI_GIST_SAVE_INFLIGHT__ = false;
     }
   };
 
