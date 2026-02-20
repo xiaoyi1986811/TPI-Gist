@@ -2,6 +2,34 @@
 
 <html lang="zh-CN">
 <head>
+
+<script>
+// === IndexedDB 配额初始化（替代 localStorage 5MB 基准）===
+(function() {
+  window.__idbQuota = 0;       // 字节
+  window.__idbQuotaMB = 0;     // MB
+  if (navigator && navigator.storage && navigator.storage.estimate) {
+    navigator.storage.estimate().then(function(est) {
+      window.__idbQuota = est.quota || 0;
+      window.__idbQuotaMB = Math.round((est.quota || 0) / (1024 * 1024));
+      // 刷新存储指示器（如果已渲染）
+      if (typeof window.checkStorageUsage === 'function') {
+        try { window.checkStorageUsage(); } catch(e) {}
+      }
+      if (typeof window.updateStorageIndicator === 'function') {
+        try { window.updateStorageIndicator(); } catch(e) {}
+      }
+    }).catch(function() {
+      window.__idbQuota = 2 * 1024 * 1024 * 1024;  // fallback 2GB
+      window.__idbQuotaMB = 2048;
+    });
+  } else {
+    window.__idbQuota = 2 * 1024 * 1024 * 1024;
+    window.__idbQuotaMB = 2048;
+  }
+})();
+</script>
+
 <script>
 
 /* ===== TPI Hotfix: 防止登录后控制台报错 + 降噪 (2026-02-15) ===== */
@@ -74,17 +102,28 @@
 
 
 /* =========================================================
-   Storage Safe Access — IndexedDB 主存储 + localStorage 同步缓存
+   Storage Safe Access — IndexedDB 唯一数据源 + localStorage 仅配置缓存
    策略：
-     · IndexedDB (TPI_LSMirror) 为主持久化层（容量大、Safari 无痕也可用）
-     · localStorage 作为同步缓存，供同步代码直接读取
-     · 写入时同步写 localStorage、异步写 IndexedDB（fire-and-forget）
-     · 读取时优先内存缓存（IndexedDB 预载）→ 回退 localStorage
+     · IndexedDB (TPI_LSMirror) 为唯一持久化层（容量大、Safari 无痕也可用）
+     · localStorage 仅保留极少量配置键（token、theme、轻量标志）
+     · 写入：业务数据只写 IndexedDB/内存；白名单配置键同时写 localStorage
+     · 读取：优先内存缓存（IndexedDB 预载）→ 白名单键可回退 localStorage
      · iOS Safari / Firefox 私有模式下安全降级，不中断脚本
-   版本：2026-02 (Git驱动版)
+   版本：2026-02-V2 (IndexedDB唯一数据源版)
 ========================================================= */
 (function(){
   'use strict';
+
+  /* ── localStorage 白名单：仅这些轻量配置键同时写 localStorage ── */
+  var _LS_WHITELIST = {
+    '__tpi_debug__':1, 'theme':1, 'tpi_theme':1, 'dark-mode':1,
+    'token':1, 'gist_token':1, 'github_token':1, 'appwrite_token':1,
+    'tpi_device_id':1, 'tpi_mobile_tips_enabled':1,
+    'tpi_backup_reminder_disabled':1
+  };
+  function _isWhitelist(k){
+    return !!_LS_WHITELIST[k];
+  }
 
   /* ── 工具 ── */
   function _warn(op, key, e){
@@ -158,13 +197,29 @@
     }).catch(function(){});
   }
   function _idbClear(){
-    Object.keys(_mem).forEach(function(k){ delete _mem[k]; });
+    // 仅清除非白名单键的内存缓存；白名单键保留（配置不参与批量清空）
+    Object.keys(_mem).forEach(function(k){ if(!_isWhitelist(k)) delete _mem[k]; });
     _openDB().then(function(db){
       try{
-        var tx = db.transaction([_IDB_STORE],'readwrite');
-        tx.objectStore(_IDB_STORE).clear();
+        // 保留白名单键，只删除业务数据
+        var txR = db.transaction([_IDB_STORE],'readonly');
+        var allReq = txR.objectStore(_IDB_STORE).getAllKeys();
+        allReq.onsuccess = function(){
+          var keys = (allReq.result||[]).filter(function(k){ return !_isWhitelist(k); });
+          if(!keys.length) return;
+          var txW = db.transaction([_IDB_STORE],'readwrite');
+          var store = txW.objectStore(_IDB_STORE);
+          keys.forEach(function(k){ store.delete(k); });
+        };
       }catch(e){}
     }).catch(function(){});
+    // 清空 localStorage 中非白名单键
+    try{
+      var ls = _getLS(); if(!ls) return;
+      var toRemove = [];
+      for(var i=0;i<ls.length;i++){ var k2=ls.key(i); if(k2&&!_isWhitelist(k2)) toRemove.push(k2); }
+      toRemove.forEach(function(k){ try{ ls.removeItem(k); }catch(e){} });
+    }catch(e){}
   }
 
   /* ── 公开异步读取（可选使用） ── */
@@ -188,6 +243,9 @@
     }).catch(function(){ return null; });
   };
 
+  /* ── 暴露内存缓存供外部代码使用（替代 Object.keys(window.__tpi_mem_cache||{})） ── */
+  window.__tpi_mem_cache = _mem;
+
   /* ── 统一公开接口（兼容全站所有 __tpi_ls_* 调用） ── */
   window.__tpi_ls_get = function(key, defaultValue){
     // 优先内存缓存（IndexedDB预载）
@@ -195,61 +253,57 @@
       var cv = _mem[key];
       return (cv!==null && cv!==undefined) ? cv : (defaultValue===undefined ? null : defaultValue);
     }
-    // 回退 localStorage
-    try{
-      var ls = _getLS(); if(!ls) return (defaultValue===undefined?null:defaultValue);
-      var v  = ls.getItem(key);
-      return (v===null||v===undefined) ? (defaultValue===undefined?null:defaultValue) : v;
-    }catch(e){
-      _warn('读取', key, e);
-      return (defaultValue===undefined?null:defaultValue);
+    // 白名单配置键可回退 localStorage（token/theme等在页面加载前可能已存在）
+    if(_isWhitelist(key)){
+      try{
+        var ls = _getLS(); if(!ls) return (defaultValue===undefined?null:defaultValue);
+        var v  = ls.getItem(key);
+        if(v!==null && v!==undefined){ _mem[key]=v; return v; }
+      }catch(e){ _warn('读取', key, e); }
     }
+    return (defaultValue===undefined?null:defaultValue);
   };
 
   window.__tpi_ls_set = function(key, value){
-    _idbSet(key, value);          // 主存储（IndexedDB + 内存缓存）
-    try{
-      var ls = _getLS(); if(!ls) return false;
-      ls.setItem(key, value);     // 同步缓存（localStorage）
-      return true;
-    }catch(e){ _warn('写入', key, e); return false; }
+    _idbSet(key, value);          // 主存储：IndexedDB + 内存缓存（所有键）
+    // 白名单配置键同步写 localStorage，以便同步代码快速读取
+    if(_isWhitelist(key)){
+      try{
+        var ls = _getLS(); if(!ls) return true;
+        ls.setItem(key, value);
+      }catch(e){ _warn('写入(LS)', key, e); }
+    }
+    return true;
   };
 
   window.__tpi_ls_remove = function(key){
     _idbDel(key);
+    // 不论是否白名单，从 localStorage 删除（保持一致性）
     try{
-      var ls = _getLS(); if(!ls) return false;
+      var ls = _getLS(); if(!ls) return true;
       ls.removeItem(key);
-      return true;
-    }catch(e){ _warn('删除', key, e); return false; }
+    }catch(e){ _warn('删除', key, e); }
+    return true;
   };
 
   window.__tpi_ls_clear = function(){
     _idbClear();
-    try{
-      var ls = _getLS(); if(!ls) return false;
-      ls.clear();
-      return true;
-    }catch(e){ _warn('清空', '', e); return false; }
+    return true;
   };
 
   window.__tpi_ls_length = function(defaultValue){
-    try{
-      var ls = _getLS(); if(!ls) return defaultValue===undefined?0:defaultValue;
-      return ls.length;
-    }catch(e){ return defaultValue===undefined?0:defaultValue; }
+    // 基于内存缓存返回长度（不依赖 localStorage）
+    return Object.keys(_mem).length;
   };
 
   window.__tpi_ls_key = function(i, defaultValue){
-    try{
-      var ls = _getLS(); if(!ls) return defaultValue===undefined?null:defaultValue;
-      return ls.key(i);
-    }catch(e){ return defaultValue===undefined?null:defaultValue; }
+    var keys = Object.keys(_mem);
+    return (i>=0 && i<keys.length) ? keys[i] : (defaultValue===undefined?null:defaultValue);
   };
 
   window.__tpi_ls_obj = function(){
-    var ls = _getLS();
-    return ls || {};
+    // 返回内存缓存的代理对象，兼容 Object.keys() 等操作
+    return _mem;
   };
 
   
@@ -625,81 +679,580 @@ window.__tpi_legacy_loadTpiData_1 = function () {
       }
     }catch(e){}
 
+    // ✅ [增强补丁] 追加DOM计算分数（确保readonly分数/评级100%包含在导出中）
+    try{
+      if(typeof _collectComputedScores === 'function'){
+        const cs = _collectComputedScores();
+        if(cs && Object.keys(cs).length) dayData._computedScores = cs;
+      }
+    }catch(e){}
+
     return { dateKey, dayData };
   }
 
   function _buildExportObject(){
     const {dateKey, dayData} = _prepareSnapshot();
-    return {
+    // dayData already has _scoreDashboard from collectDailyData patch
+    const exportObj = {
       schema: "tpi_export_v2",
       exportedAt: _nowISO(),
       date: dateKey,
       data: dayData
     };
+    // Top-level _scoreDashboard for direct markdown access
+    try{ exportObj._scoreDashboard = dayData._scoreDashboard || {}; }catch(e){}
+    return exportObj;
+  }
+
+  // ✅ [增强补丁] 收集DOM中实时计算的分数/评级/状态（确保100%导出）
+  function _collectComputedScores(){
+    const scores = {};
+    try{
+      document.querySelectorAll('[data-score]').forEach(el=>{
+        const key = el.getAttribute('data-score');
+        const val = (el.tagName === 'INPUT') ? el.value : el.textContent.trim();
+        if(key && val !== undefined && val !== '') scores['dashboard_' + key] = val;
+      });
+    }catch(e){}
+    try{ const re = document.getElementById('rating-emoji'); if(re) scores['rating_emoji'] = re.textContent.trim(); }catch(e){}
+    try{ const tt = document.getElementById('tpi-total'); if(tt) scores['tpi_total_display'] = tt.value || tt.textContent.trim(); }catch(e){}
+    try{ const tts = document.getElementById('tpi-total-score'); if(tts) scores['tpi_total_score_display'] = tts.textContent.trim(); }catch(e){}
+    try{ const tr = document.getElementById('tpi-rating'); if(tr) scores['tpi_rating_display'] = tr.value; }catch(e){}
+    try{
+      ['academic-score','personal-score','life-score','logistics-score',
+       'ma7-score','ami-score','fli-score','sys-score','bonus-score'].forEach(id=>{
+        const el = document.getElementById(id);
+        if(el){ const v = (el.tagName === 'INPUT') ? el.value : el.textContent.trim(); if(v !== undefined && v !== '') scores['score_' + id] = v; }
+      });
+    }catch(e){}
+    try{
+      let checkin = null;
+      try{ checkin = JSON.parse(localStorage.getItem('tpi_checkin_data') || 'null'); }catch(e){}
+      if(checkin) scores['checkin_data_snapshot'] = checkin;
+    }catch(e){}
+    try{
+      document.querySelectorAll('input[readonly][id], input[disabled][id]').forEach(el=>{
+        if(el.value && el.value.trim() && el.id && !el.id.startsWith('ts-') && !el.id.startsWith('sync-') && !/token|secret|password|pat/i.test(el.id)){
+          scores['computed_' + el.id] = el.value;
+        }
+      });
+    }catch(e){}
+    try{
+      const chartIds = [];
+      document.querySelectorAll('canvas[id]').forEach(el=>{ chartIds.push(el.id); });
+      if(chartIds.length) scores['chart_elements'] = chartIds;
+    }catch(e){}
+    // ✅ [完整导出补丁] 收集统计面板数据（avg-tpi, max-tpi 等）
+    try{
+      ['avg-tpi','max-tpi','stats-avg-tpi','stats-max-tpi','stats-days-count','consecutive-days','weekly-avg-tpi'].forEach(function(id){
+        var el=document.getElementById(id);
+        if(el){ var v=(el.tagName==='INPUT')?el.value:el.textContent.trim(); if(v&&v!=='') scores['stats_'+id]=v; }
+      });
+    }catch(e){}
+    // ✅ [完整导出补丁] 收集徽章解锁状态（badges container）
+    try{
+      var _bc=document.getElementById('badgesContainer');
+      if(_bc){
+        var _bdg=[];
+        _bc.querySelectorAll('.badge-item').forEach(function(b){
+          var nameEl=b.querySelector('.badge-name');
+          var catEl=b.querySelector('.badge-category');
+          var descEl=b.querySelector('.badge-description');
+          var progEl=b.querySelector('.badge-progress');
+          _bdg.push({name:(nameEl?nameEl.textContent.trim():''),category:(catEl?catEl.textContent.trim():''),description:(descEl?descEl.textContent.trim():''),progress:(progEl?progEl.textContent.trim():''),unlocked:b.classList.contains('unlocked')});
+        });
+        if(_bdg.length>0) scores['badge_states']=_bdg;
+      }
+    }catch(e){}
+    return scores;
   }
 
   function _buildMarkdown(exportObj){
-    const d = exportObj && exportObj.date ? exportObj.date : '';
-    const t = exportObj && exportObj.exportedAt ? exportObj.exportedAt : _nowISO();
+    var d = exportObj && exportObj.date ? exportObj.date : '';
+    var t = exportObj && exportObj.exportedAt ? exportObj.exportedAt : _nowISO();
+    var dd = (exportObj && exportObj.data) ? exportObj.data : {};
 
-    // 可读摘要（不追求覆盖所有字段；100% 还原靠内嵌 JSON）
-    const lines = [];
-    lines.push(`# TPI 数据导出（Markdown）`);
-    lines.push(`- 日期：${d}`);
-    lines.push(`- 导出时间：${t}`);
-    lines.push(``);
-    lines.push(`> 说明：下方包含一段“完整快照 JSON”。要做到 **100% 复现**，请以该 JSON 为准。`);
-    lines.push(``);
+    var lines = [];
+    lines.push('# TPI 完整数据导出（Markdown）');
+    lines.push('');
+    lines.push('| 字段 | 值 |');
+    lines.push('|------|-----|');
+    lines.push('| **日期** | ' + d + ' |');
+    lines.push('| **导出时间** | ' + t + ' |');
+    lines.push('');
+    lines.push('> ✅ 本文档 100% 包含当前页面所有输入、勾选、计算分数、评级、状态与签到记录。末尾附完整 JSON 快照。');
+    lines.push('');
 
-    // 摘要：尽量展示用户常用字段（存在就写，不存在就跳过）
-    const dd = (exportObj && exportObj.data) ? exportObj.data : {};
-    function addKV(title, keys){
-      const kv = [];
-      keys.forEach(k=>{
-        if (dd[k] !== undefined && dd[k] !== null && String(dd[k]).trim() !== '') kv.push([k, dd[k]]);
+    // ===== 1. 实时分数看板 =====
+    try {
+      var sd = dd['_scoreDashboard'] || {};
+      var sdKeys = Object.keys(sd);
+      if (sdKeys.length > 0) {
+        lines.push('## 📊 分数看板（实时）');
+        lines.push('');
+        lines.push('| 指标 | 值 |');
+        lines.push('|------|-----|');
+        var sdLabels = {
+          'ma7': 'MA7（7日均分）', 'ami': 'AMI（学业动力）', 'fli': 'FLI（外语）',
+          'sys': 'SYS（系统）', 'bonus': 'BONUS（加分）', 'total': '**总分**',
+          'rating': '评级', 'rating_emoji': '评级符号',
+          'bar_ma7': 'MA7', 'bar_ami': 'AMI', 'bar_fli': 'FLI',
+          'bar_sys': 'SYS', 'bar_bonus': 'BONUS', 'bar_total': '**总分**',
+          'bar_rating': '评级'
+        };
+        var shownSd = {};
+        // 优先显示 bar_ 版本
+        ['bar_total','bar_ma7','bar_ami','bar_fli','bar_sys','bar_bonus','bar_rating','rating_emoji'].forEach(function(k){
+          if (sd[k] !== undefined && sd[k] !== '') {
+            lines.push('| ' + (sdLabels[k]||k) + ' | **' + sd[k] + '** |');
+            shownSd[k] = true;
+            // 去掉重复的无前缀版
+            shownSd[k.replace('bar_','')] = true;
+          }
+        });
+        sdKeys.forEach(function(k){
+          if (!shownSd[k] && sd[k] !== undefined && sd[k] !== '') {
+            lines.push('| ' + (sdLabels[k]||k) + ' | ' + sd[k] + ' |');
+          }
+        });
+        lines.push('');
+      }
+    } catch(e) {}
+
+    // ===== 2. TPI仪表盘核心数据（FIELDS.scoreFields） =====
+    try {
+      var scoreMap = {
+        'tpi-total': 'TPI总分', 'tpi-rating': 'TPI评级',
+        'ma7-score': 'MA7分数', 'ami-score': 'AMI分数',
+        'fli-score': 'FLI分数', 'sys-score': 'SYS分数', 'bonus-score': 'BONUS分数',
+        'bcm-morning-score': '晨间入馆得分', 'bcm-evening-score': '晚间离馆得分',
+        'bcm-sleep-score': '睡眠得分', 'bcm-digital-score': '数字气隙得分',
+        'bcm-afternoon-score': '下午奖励得分',
+        'hsm-core-score': '健康系统核心分', 'hsm-morning-score': '晨间健康分',
+        'hsm-afternoon-score': '午间健康分',
+        'hsm-water-morning-score': '晨间饮水分', 'hsm-water-afternoon-score': '午间饮水分',
+        'hsm-water-evening-score': '晚间饮水分',
+        'fli-core-score': 'FLI核心分', 'fli-fragment-score': 'FLI碎片分',
+        'academic-score': '学术维度总分', 'personal-score': '个人维度总分',
+        'life-score': '生活维度总分', 'logistics-score': '系统维度总分'
+      };
+      var scoreItems = [];
+      Object.keys(scoreMap).forEach(function(k){
+        var v = dd[k];
+        if (v !== undefined && v !== null && v !== '') scoreItems.push([scoreMap[k], v]);
       });
-      if (!kv.length) return;
-      lines.push(`## ${title}`);
-      kv.forEach(([k,v])=>{
-        const val = (typeof v === 'object') ? `\`${JSON.stringify(v)}\`` : String(v);
-        lines.push(`- **${k}**：${val}`);
-      });
-      lines.push(``);
-    }
+      // Also collect from formState for readonly scores
+      if (dd._formState) {
+        Object.keys(dd._formState).forEach(function(k){
+          var cleanK = k.replace(/^#/,'');
+          if (!scoreMap[cleanK] && dd[cleanK] === undefined) {
+            var item = dd._formState[k];
+            if (item && (item.type === 'number' || item.tag === 'input') && item.value !== undefined && item.value !== '') {
+              if (/score|total|rating|level/i.test(cleanK)) {
+                scoreItems.push([cleanK, item.value]);
+              }
+            }
+          }
+        });
+      }
+      if (scoreItems.length > 0) {
+        lines.push('## 🏆 TPI仪表盘分数');
+        lines.push('');
+        lines.push('| 项目 | 分数/评级 |');
+        lines.push('|------|-----------|');
+        scoreItems.forEach(function(pair){ lines.push('| ' + pair[0] + ' | **' + pair[1] + '** |'); });
+        lines.push('');
+      }
+    } catch(e) {}
 
-    addKV('每日摘要', ['daily-summary','daily-reflection','cliffhanger','first-action']);
-    addKV('计分概览', ['tpi-total','ma7-score','ami-score','fli-score','sys-score','bonus-score','tpi-rating']);
-    // 雷达/杂事：只放“数量摘要”
-    try{
-      const r = dd.futureRadarV3;
-      if (r && typeof r === 'object') {
-        const c = (k)=> Array.isArray(r[k]) ? r[k].length : 0;
-        const total = c('tempLife')+c('tempAcademic')+c('regularLife')+c('regularAcademic');
-        lines.push(`## 未来事件雷达（摘要）`);
-        lines.push(`- 总事件数：${total}`);
-        lines.push(`- 临时生活：${c('tempLife')}；临时学术：${c('tempAcademic')}；常规生活：${c('regularLife')}；常规学术：${c('regularAcademic')}`);
-        lines.push(``);
+    // ===== 3. 时间记录（BCM时间字段） =====
+    try {
+      var timeMap = {
+        'bcm-morning-time': '晨间入馆时间', 'bcm-morning-yesterday-time': '昨日晨间时间',
+        'bcm-evening-exit': '晚间离馆时间', 'bcm-evening-yesterday': '昨日晚间时间',
+        'bcm-sleep-time': '睡眠时间', 'bcm-sleep-yesterday': '昨日睡眠时间'
+      };
+      var timeItems = [];
+      Object.keys(timeMap).forEach(function(k){
+        var v = dd[k];
+        if (v !== undefined && v !== null && v !== '') timeItems.push([timeMap[k], v]);
+      });
+      if (timeItems.length > 0) {
+        lines.push('## ⏰ 时间记录');
+        lines.push('');
+        timeItems.forEach(function(pair){ lines.push('- **' + pair[0] + '**：' + pair[1]); });
+        lines.push('');
+      }
+    } catch(e) {}
+
+    // ===== 4. 状态选择（select字段） =====
+    try {
+      var selectMap = {
+        'tpi-rating': 'TPI评级', 'bcm-digital-status': '数字气隙状态',
+        'bcm-afternoon-status': '下午状态', 'hsm-core-status': '健康核心状态',
+        'hsm-morning-status': '晨间健康状态', 'hsm-afternoon-status': '午间健康状态',
+        'hsm-water-morning-status': '晨间饮水状态', 'hsm-water-afternoon-status': '午间饮水状态',
+        'hsm-water-evening-status': '晚间饮水状态', 'injection-mode': '注入模式',
+        'radar-time-mode': '雷达时间模式', 'radar-recurrence': '雷达重复设置',
+        'radar-calendar-type': '雷达日历类型', 'radar-recurrence-count': '雷达重复次数',
+        'radar-remind-advance': '提前提醒', 'radar-remind-sameday': '当天提醒'
+      };
+      var selectItems = [];
+      Object.keys(selectMap).forEach(function(k){
+        var v = dd[k];
+        if (v !== undefined && v !== null && v !== '') selectItems.push([selectMap[k], v]);
+      });
+      if (selectItems.length > 0) {
+        lines.push('## 🔧 状态选择');
+        lines.push('');
+        lines.push('| 选项 | 值 |');
+        lines.push('|------|-----|');
+        selectItems.forEach(function(pair){ lines.push('| ' + pair[0] + ' | ' + pair[1] + ' |'); });
+        lines.push('');
+      }
+    } catch(e) {}
+
+    // ===== 5. 勾选框状态 =====
+    try {
+      var boolMap = {
+        'ignition-physical': '燃点·体能启动',
+        'ignition-micro-target': '燃点·微目标',
+        'ignition-painless-start': '燃点·无痛启动',
+        'start-morning-block': '晨间时段启动',
+        'start-afternoon-block': '午间时段启动',
+        'start-evening-block': '晚间时段启动',
+        'academic-dialogue': '学术对话',
+        'ami-scan-reading': 'AMI扫描阅读',
+        'fli-vn': 'FLI·越南语',
+        'fli-en': 'FLI·英语',
+        'radar-reminder-active': '雷达提醒激活',
+        'radar-important': '雷达重要标记',
+        'sync-core-axioms': '同步·核心公理',
+        'sync-sop': '同步·SOP',
+        'sync-formulas': '同步·公式',
+        'sync-version': '同步·版本',
+        'sync-modules': '同步·模块',
+        'sync-functions': '同步·功能',
+        'sync-rules': '同步·规则',
+        'sync-auto-backup': '自动备份'
+      };
+      var checkItems = [];
+      Object.keys(boolMap).forEach(function(k){
+        var v = dd[k];
+        if (v !== undefined && v !== null) checkItems.push([boolMap[k], v]);
+      });
+      // Also get from _formState checkboxes
+      if (dd._formState) {
+        Object.keys(dd._formState).forEach(function(k){
+          var item = dd._formState[k];
+          if (item && item.type === 'checkbox') {
+            var cleanK = k.replace(/^#/,'');
+            if (!boolMap[cleanK]) {
+              var label = item.label || item.selector || cleanK;
+              checkItems.push([label, item.checked]);
+            }
+          }
+        });
+      }
+      if (checkItems.length > 0) {
+        lines.push('## ☑️ 勾选框状态');
+        lines.push('');
+        checkItems.forEach(function(pair){
+          var icon = pair[1] ? '✅' : '☐';
+          lines.push('- ' + icon + ' **' + pair[0] + '**');
+        });
+        lines.push('');
+      }
+    } catch(e) {}
+
+    // ===== 6. 文本输入内容 =====
+    try {
+      var textMap = {
+        'daily-summary': '每日总结',
+        'daily-reflection': '每日反思',
+        'cliffhanger': 'Cliffhanger（悬念任务）',
+        'first-action': '首要行动',
+        'misc-edit-content': '杂事编辑内容',
+        'fli-core-notes': 'FLI核心笔记',
+        'type-s-content-morning': '晨间S型内容',
+        'type-s-content-afternoon': '午间S型内容',
+        'type-s-content-evening1': '晚间1 S型内容',
+        'type-s-content-evening2': '晚间2 S型内容',
+        'type-s-content-flexible': '弹性S型内容',
+        'victory-1': '胜利记录1',
+        'victory-2': '胜利记录2',
+        'victory-3': '胜利记录3',
+        'bonus-reason': 'Bonus理由'
+      };
+      var textItems = [];
+      Object.keys(textMap).forEach(function(k){
+        var v = dd[k];
+        if (v !== undefined && v !== null && String(v).trim() !== '') textItems.push([textMap[k], v]);
+      });
+      // Also get non-empty text inputs from _formState not already shown
+      if (dd._formState) {
+        var shownTextKeys = new Set(Object.keys(textMap));
+        Object.keys(dd._formState).forEach(function(k){
+          var item = dd._formState[k];
+          if (item && (item.type === 'text' || item.type === 'textarea' || item.tag === 'textarea' || item.type === 'time' || item.type === 'number') && item.value) {
+            var cleanK = k.replace(/^#/,'');
+            if (!shownTextKeys.has(cleanK) && String(item.value).trim() !== '' && String(item.value).trim() !== '0') {
+              // ✅ 优先用 aria-label（AMI/FLI/SYS表格的可读标签），其次用selector
+              var displayKey = item.label || (cleanK.startsWith('$') ? (item.selector || cleanK) : cleanK);
+              // 跳过纯CSS路径（太长且不可读）—— 但如果有label就保留
+              if (!item.label && (displayKey.indexOf(':nth-of-type') >= 0 || displayKey.length > 80)) return;
+              textItems.push([displayKey, item.value]);
+            }
+          }
+        });
+      }
+      if (textItems.length > 0) {
+        lines.push('## 📝 文本输入内容');
+        lines.push('');
+        textItems.forEach(function(pair){
+          lines.push('### ' + pair[0]);
+          lines.push('');
+          lines.push(String(pair[1]));
+          lines.push('');
+        });
+      }
+    } catch(e) {}
+
+
+    // ===== AMI/FLI/SYS 表格详细数据（第1-5部分） =====
+    try {
+      var tableData = [];
+      var sectionNames = {
+        'ami': 'AMI 学术表现', 'fli': 'FLI 外语学习', 'sys': 'SYS 系统',
+        'bcm': 'BCM 行为管控', 'hsm': 'HSM 健康系统'
+      };
+      // 从_formState中提取带有aria-label的表格输入（这些来自AMI/FLI/SYS表格）
+      if (dd._formState) {
+        var tableItems = [];
+        Object.keys(dd._formState).forEach(function(k) {
+          var item = dd._formState[k];
+          if (!item || !item.label) return; // 只处理有aria-label的元素
+          // 排除已在其他章节处理的有ID的元素
+          if (k.startsWith('#')) return;
+          var val = '';
+          if (item.type === 'checkbox' || item.type === 'radio') {
+            if (!item.checked) return; // 只记录选中的checkbox/radio
+            val = item.checked ? '✅ 已勾选' : '☐ 未勾选';
+          } else {
+            val = String(item.value || '').trim();
+            if (!val || val === '0' || val === '0.0') return;
+          }
+          tableItems.push({ label: item.label, val: val, type: item.type, tag: item.tag });
+        });
+        
+        if (tableItems.length > 0) {
+          lines.push('## 📊 第1-5部分表格详细数据（AMI/FLI/SYS/BCM/HSM）');
+          lines.push('');
+          lines.push('> 本节包含所有表格中已填写的输入字段（时长、页数、字数、状态、备注等）');
+          lines.push('');
+          lines.push('| 字段标签 | 填写内容 |');
+          lines.push('|---------|---------|');
+          tableItems.forEach(function(row) {
+            var lbl = row.label.replace(/\|/g, '｜'); // escape pipes
+            var v = String(row.val).replace(/\|/g, '｜').replace(/
+/g, ' ').slice(0, 200);
+            lines.push('| ' + lbl + ' | ' + v + ' |');
+          });
+          lines.push('');
+        }
+      }
+    } catch(e) {}
+
+    // ===== 7. 签到记录 =====
+    try {
+      var ci = dd.checkinData;
+      if (ci && typeof ci === 'object') {
+        var ciDates = Array.isArray(ci.dates) ? ci.dates.sort() : Object.keys(ci).sort();
+        lines.push('## ✅ 签到记录');
+        lines.push('');
+        if (ci.currentStreak !== undefined) lines.push('- **当前连续签到**：' + ci.currentStreak + ' 天');
+        if (ci.maxStreak !== undefined) lines.push('- **最长连续记录**：' + ci.maxStreak + ' 天');
+        lines.push('- **总签到天数**：' + ciDates.length + ' 天');
+        lines.push('');
+        if (ciDates.length > 0) {
+          lines.push('**签到日期（最近30条）：**');
+          lines.push('');
+          ciDates.slice(-30).forEach(function(dt){ lines.push('- ' + dt); });
+          if (ciDates.length > 30) lines.push('- ...（共' + ciDates.length + '条，完整见JSON）');
+        }
+        lines.push('');
+      }
+    } catch(e) {}
+
+    // ===== 8. 杂事记录 =====
+    try {
+      var misc = dd.miscRecordsV1;
+      if (Array.isArray(misc) && misc.length > 0) {
+        lines.push('## 📌 杂事记录（' + misc.length + ' 条）');
+        lines.push('');
+        misc.forEach(function(item, i){
+          if (typeof item === 'object' && item) {
+            var text = item.text || item.content || item.title || item.note || JSON.stringify(item);
+            var done = item.done !== undefined ? (item.done ? '✅' : '☐') : '';
+            var time = item.time || item.date || item.createdAt || '';
+            lines.push((i+1) + '. ' + done + ' ' + text + (time ? '  `(' + time + ')`' : ''));
+          } else {
+            lines.push((i+1) + '. ' + item);
+          }
+        });
+        lines.push('');
+      }
+    } catch(e) {}
+
+    // ===== 9. 未来事件雷达 =====
+    try {
+      var radar = dd.futureRadarV3;
+      if (radar && typeof radar === 'object') {
+        var radarSections = [
+          ['tempLife', '临时生活事件'],
+          ['tempAcademic', '临时学术事件'],
+          ['regularLife', '常规生活事件'],
+          ['regularAcademic', '常规学术事件']
+        ];
+        var hasRadar = radarSections.some(function(s){ return Array.isArray(radar[s[0]]) && radar[s[0]].length > 0; });
+        if (hasRadar) {
+          lines.push('## 🎯 未来事件雷达');
+          lines.push('');
+          radarSections.forEach(function(s){
+            var arr = radar[s[0]];
+            if (Array.isArray(arr) && arr.length > 0) {
+              lines.push('### ' + s[1] + '（' + arr.length + ' 条）');
+              lines.push('');
+              arr.forEach(function(ev, i){
+                if (typeof ev === 'object' && ev) {
+                  var nm = ev.title || ev.name || ev.event || ('事件' + (i+1));
+                  var dt = ev.date || ev.startDate || '';
+                  var desc = ev.desc || ev.description || ev.note || '';
+                  var priority = ev.priority || ev.isImportant ? ' 🔴' : '';
+                  lines.push('- **' + nm + '**' + priority + (dt ? '  📅 ' + dt : '') + (desc ? '\n  > ' + desc : ''));
+                } else {
+                  lines.push('- ' + ev);
+                }
+              });
+              lines.push('');
+            }
+          });
+        }
+      }
+    } catch(e) {}
+
+    // ===== 10. 模式与配置 =====
+    try {
+      var cfgItems = [];
+      if (dd.selectedMode) cfgItems.push(['当前模式', dd.selectedMode]);
+      if (dd.vacationPeriods != null) cfgItems.push(['假期天数', dd.vacationPeriods]);
+      if (cfgItems.length > 0) {
+        lines.push('## ⚙️ 模式与配置');
+        lines.push('');
+        cfgItems.forEach(function(pair){ lines.push('- **' + pair[0] + '**：' + pair[1]); });
+        lines.push('');
+      }
+    } catch(e) {}
+
+    // ===== 11. 视图状态（规则生成的显示内容） =====
+    try {
+      var vs = dd._viewState;
+      if (vs && typeof vs === 'object') {
+        var vsItems = Object.keys(vs).filter(function(k){
+          var item = vs[k];
+          return item && item.text && String(item.text).trim() !== '';
+        });
+        if (vsItems.length > 0) {
+          lines.push('## 📋 规则生成的显示内容（viewState）');
+          lines.push('');
+          lines.push('| ID | 显示内容 |');
+          lines.push('|----|---------|');
+          vsItems.forEach(function(k){
+            var txt = vs[k].text;
+            if (txt.length > 200) txt = txt.slice(0,200) + '...';
+            lines.push('| `' + k + '` | ' + txt + ' |');
+          });
+          lines.push('');
+        }
+      }
+    } catch(e) {}
+
+    // ===== 12. 图表信息 =====
+    try {
+      var chartInfo = dd._chartInfo;
+      if (chartInfo && Object.keys(chartInfo).length > 0) {
+        lines.push('## 📈 图表元素');
+        lines.push('');
+        Object.keys(chartInfo).forEach(function(k){
+          var info = chartInfo[k];
+          if (typeof info === 'object') {
+            lines.push('- **' + k + '**：' + info.type + '（' + info.width + 'x' + info.height + '）');
+          } else {
+            lines.push('- **' + k + '**：' + info);
+          }
+        });
+        lines.push('');
+      }
+    } catch(e) {}
+
+    // ===== 统计面板数据 =====
+    try {
+      var _cs = dd['_computedScores'] || {};
+      var _statsMap = {'stats_avg-tpi':'平均TPI','stats_max-tpi':'最高TPI','stats_stats-avg-tpi':'平均TPI','stats_stats-max-tpi':'最高TPI','stats_stats-days-count':'记录天数','stats_consecutive-days':'连续天数'};
+      var _statsItems = Object.keys(_statsMap).filter(function(k){ return _cs[k]&&String(_cs[k])!==''; });
+      if(_statsItems.length>0){
+        lines.push('## 📈 统计面板数据');
+        lines.push('');
+        lines.push('| 指标 | 值 |');
+        lines.push('|------|-----|');
+        _statsItems.forEach(function(k){ lines.push('| '+_statsMap[k]+' | **'+_cs[k]+'** |'); });
+        lines.push('');
+      }
+      // 也检查 _statsPanel
+      var _sp = dd['_statsPanel'] || {};
+      var _spKeys = Object.keys(_sp).filter(function(k){ return _sp[k]&&String(_sp[k])!==''; });
+      if(_spKeys.length>0 && _statsItems.length===0){
+        lines.push('## 📈 统计面板数据');
+        lines.push('');
+        lines.push('| 指标 | 值 |');
+        lines.push('|------|-----|');
+        _spKeys.forEach(function(k){ lines.push('| '+k+' | **'+_sp[k]+'** |'); });
+        lines.push('');
       }
     }catch(e){}
 
-    try{
-      const m = dd.miscRecordsV1;
-      if (Array.isArray(m)) {
-        lines.push(`## 杂事记录（摘要）`);
-        lines.push(`- 条目数：${m.length}`);
-        lines.push(``);
+    // ===== 成就徽章状态 =====
+    try {
+      var _cs3 = dd['_computedScores'] || {};
+      var _bdgArr = _cs3['badge_states'] || dd['_badgeStates'] || [];
+      if(Array.isArray(_bdgArr)&&_bdgArr.length>0){
+        lines.push('## 🏅 成就徽章状态');
+        lines.push('');
+        lines.push('| 徽章 | 分类 | 状态 | 进度 |');
+        lines.push('|------|------|------|------|');
+        _bdgArr.forEach(function(b){
+          var nm=(b.name||'').replace(/\|/g,'｜');
+          var cat=(b.category||'').replace(/\|/g,'｜');
+          var st=b.unlocked?'🏆 已解锁':'🔒 未解锁';
+          var pr=(b.progress||'').replace(/\|/g,'｜').replace(/\n/g,' ');
+          lines.push('| '+nm+' | '+cat+' | '+st+' | '+pr+' |');
+        });
+        lines.push('');
       }
     }catch(e){}
 
-    // 100%：完整 JSON
-    lines.push(`## 完整快照 JSON（用于100%复现）`);
+    // ===== 13. 完整 JSON 快照 =====
+    lines.push('---');
+    lines.push('');
+    lines.push('## 🗂 完整 JSON 快照（用于 100% 数据复现）');
+    lines.push('');
     lines.push('```json');
     lines.push(JSON.stringify(exportObj, null, 2));
     lines.push('```');
     lines.push('');
+
     return lines.join('\n');
   }
-
   // ✅ 对外暴露：用于按钮/菜单调用
   window.exportCurrentSnapshot = function(format){
     try{
@@ -882,6 +1435,9 @@ function __tpi_collectFormState() {
     const tag = el.tagName.toLowerCase();
 
     const item = { tag, type };
+    // ✅ 保存 aria-label，让 markdown 导出能以可读标签展示 AMI/FLI/SYS 表格输入
+    const ariaLabel = el.getAttribute('aria-label') || '';
+    if (ariaLabel) item.label = ariaLabel;
 
     // ✅ 保存 selector，恢复时优先用 selector（比 name::idx 稳）
     const sel = cssPath(el);
@@ -1269,6 +1825,64 @@ window.collectDailyData = function() {
       delete data._formState['#github-token'];
       delete data._formState['#github_token'];
     }
+
+  // ✅ [完整导出补丁] 额外收集分数看板 span（无id，viewState无法捕获）
+  try {
+    var _sdScores = {};
+    document.querySelectorAll('[data-score]').forEach(function(el) {
+      var k = el.getAttribute('data-score');
+      var v = (el.tagName === 'INPUT' || el.tagName === 'SELECT') ? el.value : el.textContent.trim();
+      if (k && v !== '' && v !== '0.0') _sdScores[k] = v;
+    });
+    document.querySelectorAll('.score-item').forEach(function(item) {
+      var metric = item.getAttribute('data-metric') || '';
+      var valEl = item.querySelector('.score-value, [data-score]');
+      if (valEl && metric) {
+        var v = (valEl.tagName === 'INPUT') ? valEl.value : valEl.textContent.trim();
+        if (v) _sdScores['bar_' + metric] = v;
+      }
+    });
+    var _ratingEmoji = document.getElementById('rating-emoji');
+    if (_ratingEmoji) _sdScores['rating_emoji'] = _ratingEmoji.textContent.trim();
+    if (Object.keys(_sdScores).length > 0) data['_scoreDashboard'] = _sdScores;
+  } catch (_e) { console.warn('[collectDailyData] scoreDashboard pack failed:', _e); }
+
+  // ✅ [完整导出补丁] 收集图表canvas信息
+  try {
+    var _chartInfo = {};
+    document.querySelectorAll('canvas[id]').forEach(function(el) {
+      _chartInfo[el.id] = { type: 'canvas', width: el.width, height: el.height };
+    });
+    if (Object.keys(_chartInfo).length > 0) data['_chartInfo'] = _chartInfo;
+  } catch (_e) {}
+
+  // ✅ [完整导出补丁] 收集统计面板数据（avg-tpi, max-tpi 等展示元素）
+  try {
+    var _statsIds = ['avg-tpi','max-tpi','stats-avg-tpi','stats-max-tpi','stats-days-count','consecutive-days','weekly-avg-tpi'];
+    var _statsData = {};
+    _statsIds.forEach(function(id){
+      var el = document.getElementById(id);
+      if(el){ var v=(el.tagName==='INPUT')?el.value:el.textContent.trim(); if(v&&v!=='') _statsData[id]=v; }
+    });
+    if(Object.keys(_statsData).length>0) data['_statsPanel']=_statsData;
+  } catch(_e) {}
+
+  // ✅ [完整导出补丁] 收集徽章解锁状态
+  try {
+    var _badgesContainer = document.getElementById('badgesContainer');
+    if(_badgesContainer){
+      var _badgeStates = [];
+      _badgesContainer.querySelectorAll('.badge-item').forEach(function(b){
+        var nameEl=b.querySelector('.badge-name');
+        var catEl=b.querySelector('.badge-category');
+        var descEl=b.querySelector('.badge-description');
+        var progEl=b.querySelector('.badge-progress');
+        _badgeStates.push({name:(nameEl?nameEl.textContent.trim():''),category:(catEl?catEl.textContent.trim():''),description:(descEl?descEl.textContent.trim():''),progress:(progEl?progEl.textContent.trim():''),unlocked:b.classList.contains('unlocked')});
+      });
+      if(_badgeStates.length>0) data['_badgeStates']=_badgeStates;
+    }
+  } catch(_e) {}
+
   } catch (e) {}
 
   return { [date]: data };
@@ -1549,6 +2163,38 @@ const __fixEvents = (arr) => (arr || []).map((it, idx) => {
 };
 
 console.log('✅ 独裁补丁 v5 已在 <head> 强制加载 (collectDailyData & restoreUIFromData)');
+// ✅ [立即保存按钮] 保存当前所有数据到本地缓存
+window.__tpi_saveNow = function() {
+  try {
+    var obj = window.collectDailyData();
+    var dateKey = Object.keys(obj || {})[0];
+    if (!dateKey) throw new Error('无法获取日期');
+    var dayData = obj[dateKey];
+    __tpi_ls_set('tpi_data_' + dateKey, JSON.stringify(dayData));
+    __tpi_ls_set('tpi_temp_snapshot_' + dateKey, JSON.stringify({
+      date: dateKey, data: dayData,
+      timestamp: Date.now(), synced: false
+    }));
+    // 尝试触发云端同步（不强制，失败不报错）
+    try {
+      if (window.syncToCloud && typeof window.syncToCloud === 'function') window.syncToCloud();
+      else if (window.TPI && typeof window.TPI.syncNow === 'function') window.TPI.syncNow();
+      else if (window.saveToGist && typeof window.saveToGist === 'function') window.saveToGist(true);
+    } catch(e2) {}
+    // 显示提示
+    if (typeof _toast === 'function') {
+      _toast('✅ 数据已保存到本地（' + dateKey + '）', 'success');
+    } else if (window.tpiToast) {
+      window.tpiToast('✅ 数据已保存到本地（' + dateKey + '）', 'success');
+    } else {
+      alert('✅ 数据已保存到本地缓存！\n日期：' + dateKey + '\n包含：所有输入框、勾选框、分数、评级');
+    }
+  } catch(e) {
+    console.error('[__tpi_saveNow] failed:', e);
+    alert('❌ 保存失败，请查看控制台：' + e.message);
+  }
+};
+
 
 // ========================================
 // 🔧 性能监控和无限循环检测（新增）
@@ -2405,53 +3051,29 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    /* 2️⃣ Markdown 导出 */
+    /* 2️⃣ Markdown 导出（全面快照修复版） */
     if (btnMD) {
         btnMD.onclick = () => {
-            let md = '# TPI 数据导出（Markdown）\n\n';
-            md += `导出时间：${new Date().toLocaleString()}
-
----
-
-`;
-
-            for (let i = 0; i < __tpi_ls_length(); i++) {
-                const key = __tpi_ls_key(i);
-                const value = __tpi_ls_get(key);
-                md += `## ${key}
-
-\`\`\`text
-${value ?? ''}
-\`\`\`
-
-`;
+            if (typeof window.__tpiDirectExport === 'function') {
+                window.__tpiDirectExport('markdown');
+            } else if (typeof window.exportCurrentSnapshot === 'function') {
+                window.exportCurrentSnapshot('markdown');
+            } else {
+                alert('❌ 导出组件未就绪，请刷新页面后重试');
             }
-
-            const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = 'TPI_export.md';
-            a.click();
         };
     }
 
-    /* 3️⃣ JSON 导出 */
+    /* 3️⃣ JSON 导出（全面快照修复版） */
     if (btnJSON) {
         btnJSON.onclick = () => {
-            const data = {};
-            for (let i = 0; i < __tpi_ls_length(); i++) {
-                const k = __tpi_ls_key(i);
-                data[k] = __tpi_ls_get(k);
+            if (typeof window.__tpiDirectExport === 'function') {
+                window.__tpiDirectExport('json');
+            } else if (typeof window.exportCurrentSnapshot === 'function') {
+                window.exportCurrentSnapshot('json');
+            } else {
+                alert('❌ 导出组件未就绪，请刷新页面后重试');
             }
-
-            const blob = new Blob(
-                [JSON.stringify(data, null, 2)],
-                { type: 'application/json' }
-            );
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = 'TPI_export.json';
-            a.click();
         };
     }
 
@@ -3761,7 +4383,7 @@ window.checkDataHealthComplete = function() {
         console.log('📊 [checkDataHealthComplete] 发现问题:', issues.length);
         
         // 计算存储空间使用率
-        const maxSize = 5 * 1024 * 1024; // 5MB (估计值)
+        const maxSize = (window.__idbQuota || 2 * 1024 * 1024 * 1024); // IndexedDB 配额
         const usagePercent = ((totalSize / maxSize) * 100).toFixed(2);
         
         // 生成报告
@@ -4756,7 +5378,7 @@ window.__tpi_legacy_loadTpiData_2 = function() {
 
       // 1) 优先：按日期的本地快照（由“保存当前数据”写入）
       const keyByDate = `tpi_data_${date}`;
-      const dataStr1 = (typeof window.__tpi_ls_get === 'function') ? window.__tpi_ls_get(keyByDate) : (localStorage ? localStorage.getItem(keyByDate) : null);
+      const dataStr1 = (typeof window.__tpi_ls_get === 'function') ? window.__tpi_ls_get(keyByDate) : ((window.__tpi_mem_cache||{})[keyByDate] ?? null);
       if (dataStr1) {
         const data1 = _safeParse(dataStr1);
         if (!data1) { alert('❌ 本地保存数据已损坏，无法恢复'); return false; }
@@ -14735,6 +15357,7 @@ else FutureRadar.init();
 <p class="text-muted mb-3">
           统一的数据管理中心，支持JSON和Markdown两种格式导出，确保所有输入、勾选和计算数据都能被完整保存。
          </p>
+
 <!-- 快速导出当前数据 -->
 <div style="margin-bottom: 20px; padding: 12px; background: #dbeafe; border-radius: 8px; border-left: 3px solid #2563eb;">
 <h5 style="margin-bottom: 10px; font-size: 14px; color: #1e40af;">⚡ 快速导出当前数据</h5>
@@ -18771,7 +19394,7 @@ try {
 
                     // 验证数据大小（localStorage限制通常为5-10MB）
                     const dataStr = JSON.stringify(data);
-                    if (dataStr.length > 5000000) { // 5MB限制
+                    if (dataStr.length > (window.__idbQuota || 2147483648)) { // IndexedDB配额限制
                         throw new Error('数据过大，无法保存');
                     }
 
@@ -18900,7 +19523,7 @@ try {
                         }
                     }
                     const sizeInMB = totalSize / (1024 * 1024);
-                    const maxSize = 5;
+                    const maxSize = (window.__idbQuotaMB || 2048);
                     return (sizeInMB / maxSize) * 100;
                 } catch (e) {
                     return 0;
@@ -19375,7 +19998,7 @@ try {
                 try {
                     // 收集所有数据
                     const allData = [];
-                    const keys = Object.keys(localStorage);
+                    const keys = Object.keys(window.__tpi_mem_cache||{});
 
                     keys.forEach(key => {
                         if (key.startsWith('tpi_data_v14_final__v14_final_')) {
@@ -19440,7 +20063,7 @@ try {
                                 console.warn('[DataProcessing] 用户确认恢复备份');
                                 
                                 // 清除现有TPI数据
-                                const keys = Object.keys(localStorage);
+                                const keys = Object.keys(window.__tpi_mem_cache||{});
                                 keys.forEach(key => {
                                     if (key.startsWith('tpi_data_v14_final__v14_final_')) {
                                         __tpi_ls_remove(key);
@@ -20587,7 +21210,7 @@ ${reflection}
                     }
 
                     const sizeInMB = (totalSize / (1024 * 1024)).toFixed(2);
-                    const maxSize = 5;
+                    const maxSize = (window.__idbQuotaMB || 2048);
                     const percentage = (sizeInMB / maxSize) * 100;
 
                     if (barFill) {
@@ -20598,7 +21221,7 @@ ${reflection}
                     }
 
                     if (text) {
-                        text.textContent = `${sizeInMB} MB / ${maxSize} MB`;
+                        text.textContent = `${sizeInMB} MB / ${maxSize >= 1024 ? (maxSize/1024).toFixed(1)+' GB' : maxSize+' MB'}`;
                     }
 
                     // 增强的存储空间管理
@@ -20972,7 +21595,7 @@ const __exp = (function(){
                             console.log('📥 [importAllData] 数据迁移处理完成');
 
                             // 询问用户是否覆盖
-                            const existingKeys = Object.keys(localStorage).filter(k => k.startsWith('tpi_data_'));
+                            const existingKeys = Object.keys(window.__tpi_mem_cache||{}).filter(k => k.startsWith('tpi_data_'));
                             let message = `即将导入 ${Object.keys(migratedData.data).length} 条记录`;
                             if (existingKeys.length > 0) {
                                 message += `\n当前有 ${existingKeys.length} 条本地记录\n\n是否覆盖现有数据?`;
@@ -21693,12 +22316,12 @@ function checkStorageUsage() {
     }
 
     const sizeInMB = (totalSize / (1024 * 1024)).toFixed(2);
-    const maxSize = 5;
+    const maxSize = (window.__idbQuotaMB || 2048);
     const percentage = (totalSize / (maxSize * 1024 * 1024)) * 100;
 
     const storageInfo = document.getElementById('storage-usage-info');
     if (storageInfo) {
-      storageInfo.textContent = sizeInMB + ' MB / ' + maxSize + ' MB (' + percentage.toFixed(1) + '%)';
+      storageInfo.textContent = sizeInMB + ' MB / ' + (maxSize >= 1024 ? (maxSize/1024).toFixed(1)+' GB' : maxSize+' MB') + ' (' + percentage.toFixed(1) + '%)';
       storageInfo.style.color = percentage > 90 ? '#dc2626' : percentage > 75 ? '#f59e0b' : '#10b981';
     }
 
@@ -22894,7 +23517,7 @@ window.addEventListener('resize', function() {
                     let issues = [];
                     let report = '💊 数据健康检查报告\n\n';
 
-                    const dataKeys = Object.keys(localStorage).filter(k => k.startsWith('tpi_data_'));
+                    const dataKeys = Object.keys(window.__tpi_mem_cache||{}).filter(k => k.startsWith('tpi_data_'));
                     report += '📦 总记录数: ' + dataKeys.length + '\n\n';
 
                     dataKeys.forEach(key => {
@@ -24805,7 +25428,7 @@ window.addEventListener('resize', function() {
             }
 
             // 计算存储空间使用率
-            const maxSize = 5 * 1024 * 1024; // 5MB (估计值)
+            const maxSize = (window.__idbQuota || 2 * 1024 * 1024 * 1024); // IndexedDB 配额
             const usagePercent = ((totalSize / maxSize) * 100).toFixed(2);
 
             // 生成报告
@@ -26154,7 +26777,7 @@ window.TPIAdvanced = {
                 console.log('📊 [runComparison] 开始计算真实统计数据...');
                 
                 // 扫描所有tpi_data_*键
-                const allKeys = Object.keys(localStorage).filter(key => key.startsWith('tpi_data_'));
+                const allKeys = Object.keys(window.__tpi_mem_cache||{}).filter(key => key.startsWith('tpi_data_'));
                 console.log('📊 [runComparison] 找到', allKeys.length, '天的数据');
                 
                 if (allKeys.length === 0) {
@@ -27370,7 +27993,7 @@ if (typeof window.TPI !== 'undefined') {
         }
         
         // 扫描所有TPI数据键
-        const allKeys = Object.keys(localStorage);
+        const allKeys = Object.keys(window.__tpi_mem_cache||{});
         const tpiDataKeys = allKeys.filter(key => key.startsWith('tpi_data_'));
         const tpiBackupKeys = allKeys.filter(key => key.startsWith('tpi_backup_'));
         
@@ -29968,9 +30591,9 @@ try{
 
 
   // --- storage helpers ---
-  const lsGet = (k, d) => (typeof window.__tpi_ls_get === 'function') ? window.__tpi_ls_get(k, d) : (function(){ try{ const v=localStorage.getItem(k); return (v===null||v===undefined)?(d??null):v; }catch(e){ return d??null; } })();
-  const lsSet = (k, v) => (typeof window.__tpi_ls_set === 'function') ? window.__tpi_ls_set(k, v) : (function(){ try{ localStorage.setItem(k, v); return true; }catch(e){ return false; } })();
-  const lsRemove = (k) => (typeof window.__tpi_ls_remove === 'function') ? window.__tpi_ls_remove(k) : (function(){ try{ localStorage.removeItem(k); return true; }catch(e){ return false; } })();
+  const lsGet = (k, d) => (typeof window.__tpi_ls_get === 'function') ? window.__tpi_ls_get(k, d) : ((window.__tpi_mem_cache||{})[k] ?? d ?? null);
+  const lsSet = (k, v) => (typeof window.__tpi_ls_set === 'function') ? window.__tpi_ls_set(k, v) : ((window.__tpi_mem_cache || (window.__tpi_mem_cache = {}))[k] = v, true);
+  const lsRemove = (k) => (typeof window.__tpi_ls_remove === 'function') ? window.__tpi_ls_remove(k) : (delete (window.__tpi_mem_cache||{})[k], true);
 
   const ssGet = (k, d) => { try{ const v=sessionStorage.getItem(k); return (v===null||v===undefined)?(d??null):v; }catch(e){ return d??null; } };
   const ssSet = (k, v) => { try{ sessionStorage.setItem(k, v); return true; }catch(e){ return false; } };
@@ -30128,46 +30751,26 @@ function updateAuthPanels(){
 
   // --- Gist API ---
   // --- Auth fetch helper (Bearer/token fallback) ---
-  // --- fetch helper (Bearer/token fallback) ---
-async function fetchWithAuth(url, options, gistToken){
-  const baseHeaders = (options && options.headers && typeof options.headers==='object') ? options.headers : {};
-  const optBase = Object.assign({}, options || {});
-  const timeoutMs = (optBase && optBase.__timeoutMs) ? Number(optBase.__timeoutMs) : 30000; // 30s
-  // 清理自定义字段，避免传给 fetch
-  try{ delete optBase.__timeoutMs; }catch(e){}
-
-  async function _fetchOnce(headers){
-    const controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-    const t = controller ? setTimeout(()=>{ try{ controller.abort(); }catch(e){} }, timeoutMs) : null;
-    try{
-      const opt = Object.assign({}, optBase);
-      opt.headers = Object.assign({}, baseHeaders, headers);
-      if (controller) opt.signal = controller.signal;
-      return await fetch(url, opt);
-    }catch(err){
-      // 将网络错误统一为可读信息
-      const msg = (err && (err.name==='AbortError')) ? `网络超时（>${timeoutMs/1000}s）` : (err && err.message ? err.message : String(err));
-      throw new Error(msg);
-    }finally{
-      if (t) clearTimeout(t);
-    }
-  }
-
-  // 1) Bearer
-  let res = await _fetchOnce({
-    'Authorization': `Bearer ${gistToken}`,
-    'Accept': baseHeaders['Accept'] || 'application/vnd.github+json'
-  });
-
-  // 2) Fallback: classic PAT expects "token"
-  if (res && (res.status === 401 || res.status === 403)) {
-    res = await _fetchOnce({
-      'Authorization': `token ${gistToken}`,
+  async function fetchWithAuth(url, options, gistToken){
+    const baseHeaders = (options && options.headers && typeof options.headers==='object') ? options.headers : {};
+    const opt1 = Object.assign({}, options || {});
+    opt1.headers = Object.assign({}, baseHeaders, {
+      'Authorization': `Bearer ${gistToken}`,
       'Accept': baseHeaders['Accept'] || 'application/vnd.github+json'
     });
+
+    let res = await fetch(url, opt1);
+    if (res && (res.status === 401 || res.status === 403)) {
+      // Fallback for classic PAT that expects "token" scheme in some environments
+      const opt2 = Object.assign({}, options || {});
+      opt2.headers = Object.assign({}, baseHeaders, {
+        'Authorization': `token ${gistToken}`,
+        'Accept': baseHeaders['Accept'] || 'application/vnd.github+json'
+      });
+      res = await fetch(url, opt2);
+    }
+    return res;
   }
-  return res;
-}
 
   async function gistGet(gistToken){
     return await fetchWithAuth(GIST_API, {
@@ -30241,15 +30844,6 @@ function parseGistFileContent(gistJson){
     const nsKey = `${username}::${dateKey}`;
 
     try{
-// UI: 立即给出“正在保存”反馈，避免用户以为“点了没反应”
-const _saveBtn = document.getElementById('save-btn') || document.querySelector('button[onclick*="tpiSaveToday"]');
-const _saveBtnText = _saveBtn ? (_saveBtn.innerText || _saveBtn.textContent || '') : '';
-if (_saveBtn) {
-  try{ _saveBtn.disabled = true; }catch(e){}
-  try{ _saveBtn.dataset._tpi_old_text = _saveBtnText; }catch(e){}
-  try{ _saveBtn.innerText = '⏳ 正在上传…'; }catch(e){}
-}
-try{ tpiShowMsg('tpi-sync-msg', `⏳ 正在保存到云端：${dateKey}\n（正在读取云端版本并合并上传…）`, false); }catch(e){}
       // 1) GET 原 Gist
       const resGet = await gistGet(token);
 
@@ -30426,18 +31020,7 @@ try{ tpiShowMsg('tpi-sync-msg', `⏳ 正在保存到云端：${dateKey}\n（正�
       console.error('[Gist Save] failed:', err);
       tpiShowMsg('tpi-sync-msg',`❌ 保存失败，请检查网络：${err.message || err}`, true);
       return false;
-}finally{
-  // UI: 恢复按钮状态
-  try{
-    const _saveBtn = document.getElementById('save-btn') || document.querySelector('button[onclick*="tpiSaveToday"]');
-    if (_saveBtn) {
-      try{ _saveBtn.disabled = false; }catch(e){}
-      const old = _saveBtn.dataset ? _saveBtn.dataset._tpi_old_text : '';
-      if (old) { try{ _saveBtn.innerText = old; }catch(e){} }
-      try{ delete _saveBtn.dataset._tpi_old_text; }catch(e){}
     }
-  }catch(e){}
-}
   };
 
   // Gist 后端实现。
@@ -30684,7 +31267,7 @@ try{ tpiShowMsg('tpi-sync-msg', `⏳ 正在保存到云端：${dateKey}\n（正�
       const key = `tpi_data_${dateKey || 'unknown'}`;
       const dataStr = JSON.stringify(dayData || {});
       if (typeof __tpi_ls_set === 'function') __tpi_ls_set(key, dataStr);
-      else localStorage.setItem(key, dataStr);
+      else (window.__tpi_mem_cache || (window.__tpi_mem_cache = {}))[key] = dataStr; // fallback: IndexedDB not available
       // 静默保存本地快照（避免干扰云端同步提示）
       return true;
     }catch(err){
@@ -31814,6 +32397,296 @@ window.TPISnapshotSystem = {
 
 console.log('✅ [Snapshot] Git驱动版快照系统已加载 — IndexedDB专属库 + localStorage备索引 + Gist云端通道');
 })();
+</script>
+
+<script>
+/* ================================================================
+   __tpiDirectExport — 全量 DOM 扫描导出引擎 V7
+   适配版本：Git 驱动 V8
+   覆盖内容：
+     ① 所有表单控件（含 readonly 自动计算分数）
+     ② span/div 显示型计算结果（各模块合计分）
+     ③ 打卡连胜/连败、豁免数量等统计展示
+     ④ 杂记（Misc Log）全部记录
+     ⑤ Future Radar 雷达事件
+     ⑥ contenteditable 富文本内容
+================================================================ */
+window.__tpiDirectExport = function(fmt) {
+  fmt = (fmt || 'json').toLowerCase();
+
+  var dateEl = document.getElementById('date-input') || document.querySelector('input[type="date"]');
+  var date = (dateEl && dateEl.value) ? dateEl.value : (function(){
+    var d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  })();
+
+  var textareas = [], checkboxes = [], selects = [], numbers = [], times = [], texts = [];
+
+  document.querySelectorAll('input, textarea, select').forEach(function(el) {
+    var id = el.id || '';
+    var tag = el.tagName.toLowerCase();
+    var type = (el.getAttribute('type') || '').toLowerCase();
+    var ariaLabel = el.getAttribute('aria-label') || '';
+    var label = ariaLabel || (id ? id.replace(/-/g,' ') : '') || el.getAttribute('placeholder') || tag;
+
+    if (/token|secret|password|pat/i.test(id) || type === 'password' || type === 'hidden') return;
+    if (id === 'date-input') return;
+    if (el.closest && el.closest('#radar-form, #radar-modal, #radar-settings-modal')) return;
+
+    if (type === 'checkbox') {
+      if (id === 'misc-log-select-all') return;
+      checkboxes.push({ label: label, id: id, checked: !!el.checked });
+    } else if (type === 'radio') {
+      if (el.checked) texts.push({ label: label, value: el.value });
+    } else if (tag === 'select') {
+      var v = el.value || '';
+      var disp = '';
+      try { disp = el.options[el.selectedIndex] ? el.options[el.selectedIndex].text.trim() : v; } catch(e) { disp = v; }
+      selects.push({ label: label, id: id, value: v, display: disp });
+    } else if (tag === 'textarea') {
+      if (id === 'misc-records-json' || id === 'json-import-area') return;
+      textareas.push({ label: label, id: id, value: el.value || '' });
+    } else if (type === 'number') {
+      numbers.push({ label: label, id: id, value: el.value || '', readonly: !!el.readOnly });
+    } else if (type === 'time') {
+      times.push({ label: label, id: id, value: el.value || '' });
+    } else {
+      texts.push({ label: label, id: id, value: el.value || '' });
+    }
+  });
+
+  var scoreMap = {};
+
+  [
+    ['tpi-total','TPI总分'],['tpi-rating','TPI评级'],
+    ['ma7-score','MA7（7日均分）'],['ami-score','AMI得分'],
+    ['fli-score','FLI得分'],['sys-score','SYS得分'],['bonus-score','BONUS得分'],
+    ['streak-days','连胜天数'],['losing-streak-days','连败天数'],
+    ['bcm-morning-score','BCM-晨间入馆'],['bcm-evening-score','BCM-晚间离馆'],
+    ['bcm-sleep-score','BCM-睡眠'],['bcm-digital-score','BCM-数字气隙'],
+    ['bcm-afternoon-score','BCM-下午奖励'],
+    ['bcm-lunch-score','BCM-午间防守'],['bcm-dinner-score','BCM-晚间防守'],
+    ['hsm-core-score','HSM-核心运动'],
+    ['fli-core-score','FLI-核心学习'],['fli-fragment-score','FLI-碎片磨耳']
+  ].forEach(function(p) {
+    var el = document.getElementById(p[0]);
+    if (!el) return;
+    var v = (el.tagName === 'INPUT' || el.tagName === 'SELECT') ? el.value : el.textContent.trim();
+    if (v && v !== '' && v !== '0' && v !== '0.0') scoreMap[p[1]] = v;
+  });
+
+  [
+    ['rating-emoji','评级符号'],
+    ['bonus-total-score','BONUS合计'],['ami-total-score','AMI合计'],
+    ['bcm-total-score','BCM合计'],['hsm-total-score','HSM合计'],
+    ['fli-total-score','FLI合计'],['logistics-total-score','Logistics合计'],
+    ['ignition-total','Ignition合计'],
+    ['total-hours','学习总小时'],['total-pages','总页数'],['total-words','总单词数'],
+    ['checkin-streak-display','打卡连续天数'],['losing-days-display','连败天数显示'],
+    ['exemption-a-count','豁免A数量'],['exemption-b-count','豁免B数量'],
+    ['misc-log-count','杂记条数'],['misc-log-chars','杂记总字数']
+  ].forEach(function(p) {
+    var el = document.getElementById(p[0]);
+    if (!el) return;
+    var v = el.textContent.trim().replace(/\s+/g,' ');
+    if (v && v !== '' && v !== '-' && v !== '0' && v !== '0.0') scoreMap[p[1]] = v;
+  });
+
+  var miscRecords = [];
+  try {
+    if (window.appData && window.appData.misc && window.appData.misc[date]) {
+      miscRecords = window.appData.misc[date];
+    } else {
+      var miscRaw = null;
+      var miscTA = document.getElementById('misc-records-json');
+      if (miscTA && miscTA.value) miscRaw = miscTA.value;
+      if (!miscRaw && typeof window.__tpi_ls_get === 'function') miscRaw = window.__tpi_ls_get('tpi_misc_records_' + date);
+      if (miscRaw) { var parsed = JSON.parse(miscRaw); if (Array.isArray(parsed)) miscRecords = parsed; }
+    }
+    if (miscRecords.length === 0) {
+      var logList = document.getElementById('misc-log-list');
+      if (logList) {
+        logList.querySelectorAll('.misc-log-body, .misc-log-content').forEach(function(el) {
+          var t = el.textContent.trim();
+          if (t && t.length > 2) miscRecords.push({ text: t, _fromDOM: true });
+        });
+      }
+    }
+  } catch(e) { miscRecords = []; }
+
+  var radarEvents = { tempLife: [], tempAcademic: [], regularLife: [], regularAcademic: [] };
+  try {
+    if (window.appData && window.appData.radar) {
+      radarEvents = window.appData.radar;
+    } else {
+      ['tempLife','tempAcademic','regularLife','regularAcademic'].forEach(function(key) {
+        var listEl = document.getElementById('list-' + key);
+        if (!listEl) return;
+        listEl.querySelectorAll('.event-title, .event-name').forEach(function(el) {
+          var t = el.textContent.trim(); if (t) radarEvents[key].push({ title: t, _fromDOM: true });
+        });
+        var doneEl = document.getElementById('list-' + key + '-done');
+        if (doneEl) {
+          doneEl.querySelectorAll('.event-title, .event-name').forEach(function(el) {
+            var t = el.textContent.trim(); if (t) radarEvents[key].push({ title: t, done: true, _fromDOM: true });
+          });
+        }
+      });
+    }
+  } catch(e) {}
+
+  var richTexts = [];
+  document.querySelectorAll('[contenteditable="true"]').forEach(function(el) {
+    if (el.closest && el.closest('#radar-form, #radar-modal, #radar-settings-modal')) return;
+    var id = el.id || '';
+    var label = el.getAttribute('aria-label') || id || el.getAttribute('placeholder') || '富文本';
+    var content = (el.innerText || el.textContent || '').trim();
+    if (content) richTexts.push({ label: label, id: id, value: content });
+  });
+
+  function download(text, filename, mime) {
+    var blob = new Blob([text], { type: mime || 'text/plain;charset=utf-8' });
+    var a = document.createElement('a');
+    var url = URL.createObjectURL(blob);
+    a.href = url; a.download = filename; a.style.display = 'none';
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); }, 2000);
+  }
+  function ts() {
+    var n = new Date(), p = function(x){ return String(x).padStart(2,'0'); };
+    return n.getFullYear()+p(n.getMonth()+1)+p(n.getDate())+'_'+p(n.getHours())+p(n.getMinutes())+p(n.getSeconds());
+  }
+
+  if (fmt === 'json') {
+    var payload = {
+      schema: 'tpi_direct_v7_full', version: 'Git-V8',
+      date: date, exportedAt: new Date().toISOString(),
+      scores: scoreMap, textareas: textareas, richTexts: richTexts,
+      checkboxes: checkboxes, selects: selects, numbers: numbers,
+      times: times, texts: texts, miscRecords: miscRecords, radarEvents: radarEvents
+    };
+    download(JSON.stringify(payload, null, 2), 'TPI_'+date+'_'+ts()+'.json', 'application/json;charset=utf-8');
+    var filledTA = textareas.filter(function(t){ return t.value && t.value.trim(); });
+    var radarTotal = Object.values(radarEvents).reduce(function(a,b){ return a+(b?b.length:0); },0);
+    alert('✅ JSON 导出成功！\n文本框：'+filledTA.length+' 个有内容\n分数项：'+Object.keys(scoreMap).length+' 项\n杂记：'+miscRecords.length+' 条\n雷达事件：'+radarTotal+' 条');
+  } else {
+    var lines = [];
+    lines.push('# TPI 数据导出 '+date);
+    lines.push('');
+    lines.push('> 导出时间：'+new Date().toLocaleString()+'　版本：Git驱动 V8');
+    lines.push('');
+
+    var scoreKeys = Object.keys(scoreMap);
+    if (scoreKeys.length > 0) {
+      lines.push('## 📊 分数看板'); lines.push('');
+      lines.push('| 指标 | 值 |'); lines.push('|------|-----|');
+      scoreKeys.forEach(function(k){ lines.push('| '+k+' | **'+scoreMap[k]+'** |'); });
+      lines.push('');
+    }
+
+    var filledTA = textareas.filter(function(t){ return t.value && t.value.trim(); });
+    if (filledTA.length > 0) {
+      lines.push('## 📝 文本输入内容'); lines.push('');
+      filledTA.forEach(function(t){
+        lines.push('### '+t.label+(t.id?' (`'+t.id+'`)':'')); lines.push('');
+        lines.push(t.value.trim()); lines.push('');
+      });
+    }
+
+    if (richTexts.length > 0) {
+      lines.push('## 🖊️ 富文本内容'); lines.push('');
+      richTexts.forEach(function(t){ lines.push('### '+t.label); lines.push(''); lines.push(t.value); lines.push(''); });
+    }
+
+    var checkedBoxes = checkboxes.filter(function(cb){ return cb.checked; });
+    var uncheckedBoxes = checkboxes.filter(function(cb){ return !cb.checked; });
+    if (checkboxes.length > 0) {
+      lines.push('## ☑️ 勾选框状态'); lines.push('');
+      if (checkedBoxes.length > 0) {
+        lines.push('**已勾选：**'); lines.push('');
+        checkedBoxes.forEach(function(cb){ lines.push('- ✅ '+cb.label); }); lines.push('');
+      }
+      if (uncheckedBoxes.length > 0) {
+        lines.push('**未勾选：**'); lines.push('');
+        uncheckedBoxes.forEach(function(cb){ lines.push('- ☐ '+cb.label); }); lines.push('');
+      }
+    }
+
+    var filledSel = selects.filter(function(s){ return s.value && s.value.trim(); });
+    if (filledSel.length > 0) {
+      lines.push('## 🔧 下拉选择'); lines.push('');
+      lines.push('| 字段 | 选中值 |'); lines.push('|------|--------|');
+      filledSel.forEach(function(s){
+        lines.push('| '+s.label.replace(/\|/g,'｜')+' | '+(s.display||s.value).replace(/\|/g,'｜')+' |');
+      }); lines.push('');
+    }
+
+    var filledNum = numbers.filter(function(n){ return n.value && n.value !== '' && n.value !== '0'; });
+    if (filledNum.length > 0) {
+      lines.push('## 🔢 数字输入（含自动计算分数）'); lines.push('');
+      lines.push('| 字段 | 值 | 类型 |'); lines.push('|------|-----|------|');
+      filledNum.forEach(function(n){
+        lines.push('| '+n.label+' | **'+n.value+'** | '+(n.readonly?'自动计算':'手动输入')+' |');
+      }); lines.push('');
+    }
+
+    var filledTime = times.filter(function(t){ return t.value; });
+    if (filledTime.length > 0) {
+      lines.push('## ⏰ 时间记录'); lines.push('');
+      filledTime.forEach(function(t){ lines.push('- **'+t.label+'**：'+t.value); }); lines.push('');
+    }
+
+    var filledText = texts.filter(function(t){
+      return t.value && t.value.trim() && !/^\d{4}-\d{2}-\d{2}$/.test(t.value.trim()) && t.value.trim() !== '-';
+    });
+    if (filledText.length > 0) {
+      lines.push('## 🔤 其他文本输入'); lines.push('');
+      filledText.forEach(function(t){ lines.push('- **'+t.label+'**：'+t.value.trim().slice(0,300)); }); lines.push('');
+    }
+
+    if (miscRecords.length > 0) {
+      lines.push('## 📓 杂记记录（'+date+'，共 '+miscRecords.length+' 条）'); lines.push('');
+      miscRecords.forEach(function(r, i){
+        var text = (r && r.text) ? r.text : (typeof r === 'string' ? r : JSON.stringify(r));
+        lines.push('### 杂记 '+(i+1)+(r && r.createdAt ? '（'+r.createdAt.slice(0,19).replace('T',' ')+'）' : ''));
+        lines.push(''); lines.push(text.trim()); lines.push('');
+      });
+    }
+
+    var radarLabels = {
+      tempLife:'📅 临时生活事件', tempAcademic:'📚 临时学术事件',
+      regularLife:'🔄 常规生活事件', regularAcademic:'🎯 常规学术事件'
+    };
+    var hasRadar = Object.values(radarEvents).some(function(arr){ return arr && arr.length > 0; });
+    if (hasRadar) {
+      lines.push('## 🎯 Future Radar 事件'); lines.push('');
+      Object.keys(radarLabels).forEach(function(key){
+        var events = radarEvents[key];
+        if (!events || events.length === 0) return;
+        lines.push('### '+radarLabels[key]+'（'+events.length+' 条）'); lines.push('');
+        events.forEach(function(ev){
+          if (!ev) return;
+          var title = ev.title || ev.name || '(无标题)';
+          var done = ev.done || ev.completed || false;
+          var d2 = ev.date || ev.startDate || '';
+          var loc = ev.location || '';
+          var remarks = ev.remarks || ev.content || '';
+          var line = '- '+(done?'~~':'')+title+(done?'~~':'');
+          if (d2) line += '　📅 '+d2;
+          if (loc) line += '　📍 '+loc;
+          lines.push(line);
+          if (remarks && remarks.trim()) lines.push('  > '+remarks.trim().replace(/\n/g,'\n  > ').slice(0,300));
+        });
+        lines.push('');
+      });
+    }
+
+    download(lines.join('\n'), 'TPI_'+date+'_'+ts()+'.md', 'text/markdown;charset=utf-8');
+    var filledTA2 = textareas.filter(function(t){ return t.value && t.value.trim(); });
+    var radarTotal2 = Object.values(radarEvents).reduce(function(a,b){ return a+(b?b.length:0); },0);
+    alert('✅ Markdown 导出成功！\n文本框：'+filledTA2.length+' 个\n分数项：'+scoreKeys.length+' 项\n数字字段：'+filledNum.length+' 个\n杂记：'+miscRecords.length+' 条\n雷达事件：'+radarTotal2+' 条');
+  }
+};
 </script>
 </body>
 </html>
