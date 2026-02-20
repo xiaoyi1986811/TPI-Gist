@@ -30768,14 +30768,20 @@ function updateAuthPanels(){
     });
 
     let res = await fetch(url, opt1);
+    // 仅当 token 格式疑似经典 PAT（ghp_ / github_pat_ 开头）且首次 Bearer 失败时才回退重试
+    // 避免无效 token 场景下的双重请求，防止触发扩展消息循环
     if (res && (res.status === 401 || res.status === 403)) {
-      // Fallback for classic PAT that expects "token" scheme in some environments
-      const opt2 = Object.assign({}, options || {});
-      opt2.headers = Object.assign({}, baseHeaders, {
-        'Authorization': `token ${gistToken}`,
-        'Accept': baseHeaders['Accept'] || 'application/vnd.github+json'
-      });
-      res = await fetch(url, opt2);
+      const tk = String(gistToken || '');
+      const looksLikePAT = tk.startsWith('ghp_') || tk.startsWith('github_pat_') || (tk.length >= 40 && /^[a-zA-Z0-9_]+$/.test(tk));
+      if (looksLikePAT) {
+        // Fallback for classic PAT that expects "token" scheme in some environments
+        const opt2 = Object.assign({}, options || {});
+        opt2.headers = Object.assign({}, baseHeaders, {
+          'Authorization': `token ${gistToken}`,
+          'Accept': baseHeaders['Accept'] || 'application/vnd.github+json'
+        });
+        res = await fetch(url, opt2);
+      }
     }
     return res;
   }
@@ -31309,6 +31315,17 @@ function parseGistFileContent(gistJson){
   };
 
 window.tpiSaveToday = async function(date){
+    // 防重复点击：若上传正在进行中，直接返回
+    if (window.__TPI_SAVE_IN_PROGRESS__) {
+      tpiShowMsg('tpi-sync-msg','⏳ 上传进行中，请稍候...', false);
+      return false;
+    }
+    window.__TPI_SAVE_IN_PROGRESS__ = true;
+    // 禁用同步按钮，防止重复点击触发多次请求（间接减少扩展错误循环）
+    try {
+      const syncBtns = document.querySelectorAll('[onclick*="tpiSaveToday"]');
+      syncBtns.forEach(function(btn){ btn.disabled = true; btn.style.opacity = '0.6'; });
+    } catch(e){}
     try{
       const dateKey = (date && String(date).trim()) ? String(date).trim() : getSelectedDate();
       
@@ -31335,6 +31352,13 @@ window.tpiSaveToday = async function(date){
       console.error('[tpiSaveToday] failed:', err);
       tpiShowMsg('tpi-sync-msg',`❌ 保存失败，请检查网络：${err.message || err}`, true);
       return false;
+    } finally {
+      // 无论成功失败，释放锁并恢复按钮
+      window.__TPI_SAVE_IN_PROGRESS__ = false;
+      try {
+        const syncBtns = document.querySelectorAll('[onclick*="tpiSaveToday"]');
+        syncBtns.forEach(function(btn){ btn.disabled = false; btn.style.opacity = ''; });
+      } catch(e){}
     }
   };
 
@@ -31533,6 +31557,8 @@ try{
           const auto = document.getElementById('tpi-auto-backup');
           if (auto && !auto.checked) return;
           if (document.hidden) return;
+          // 若手动同步正在进行，跳过本轮自动备份，避免并发请求
+          if (window.__TPI_SAVE_IN_PROGRESS__) return;
           // 仅在数据有变化时自动备份，避免无意义写入/冲突
           try{
             const now = Date.now();
