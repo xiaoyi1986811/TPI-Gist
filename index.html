@@ -3530,7 +3530,7 @@ body {
 #cloud-sync-section .tpi-sync-buttons{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
 #cloud-sync-section .tpi-token-row{display:flex;align-items:center;gap:14px;}
 #cloud-sync-section #gistToken{flex:1;min-width:420px;padding:10px 14px;font-size:15px;border-radius:8px;}
-@media (max-width: 760px){#cloud-sync-section .tpi-field{grid-column:span 12;}#cloud-sync-section #gistToken{min-width:100%;}}
+@media (max-width: 760px){#cloud-sync-section .tpi-field{grid-column:span 12;}#cloud-sync-section #gistToken{min-width:0!important;width:100%!important;}#cloud-sync-section .tpi-token-row{flex-direction:column!important;align-items:stretch!important;}#cloud-sync-section .tpi-login-btn{width:100%;justify-content:center;}}
 </style>
 
 <style>
@@ -5989,7 +5989,7 @@ window.exportAsCSV = function() {
           <label for="gistToken" style="display: block; margin-bottom: 8px; font-weight: 600; color: #374151;">Gist Token</label>
 
           <div class="tpi-token-row" style="display: flex; gap: 12px; align-items: center;">
-            <input type="password" id="gistToken" placeholder="请输入 GitHub Personal Access Token（需勾选 gist 权限）" style="flex: 1; min-width: 420px; padding: 10px 14px; font-size: 15px; border: 2px solid #e5e7eb; border-radius: 8px; box-sizing: border-box;">
+            <input type="password" id="gistToken" placeholder="请输入 GitHub Personal Access Token（需勾选 gist 权限）" style="flex: 1; min-width: 420px; padding: 10px 14px; font-size: 15px; border: 2px solid #e5e7eb; border-radius: 8px; box-sizing: border-box; max-width: 100%;">
             <button type="button" onclick="tpiLogin()" class="tpi-btn tpi-btn-green tpi-login-btn" style="padding: 10px 20px; background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; white-space: nowrap; flex-shrink: 0;">✅ 登录</button>
           </div>
 
