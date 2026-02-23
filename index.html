@@ -16676,6 +16676,7 @@ const TPI = (function() {
             function initializeHeatmapCalendar() {
                 const container = document.getElementById('calendarHeatmap');
                 if (!container) return;
+                if (typeof HeatmapCalendar === 'undefined') { container.innerHTML = '<div style="color:#9ca3af;text-align:center;padding:20px;font-size:13px;">📅 热力图日历（库加载被浏览器跟踪防护拦截，功能暂不可用）</div>'; return; }
 
                 // 清空容器
                 container.innerHTML /*XSS-Safe*/ = '';
@@ -30828,10 +30829,27 @@ try{
     const el = $(elementId) || (elementId==='tpi-sync-msg' ? $('tpi-login-msg') : null);
     const el2 = $('sync-status'); // 兼容建议的 sync-status
     if (el) {
-      el.textContent = text || '';
+      // 构建带关闭按钮的提示
+      el.innerHTML = '';
       el.style.whiteSpace = 'pre-line';
       el.style.color = isError ? '#dc2626' : '#065f46';
       el.style.fontWeight = isError ? '700' : '600';
+      el.style.display = 'flex';
+      el.style.alignItems = 'flex-start';
+      el.style.gap = '8px';
+      const span = document.createElement('span');
+      span.style.flex = '1';
+      span.style.whiteSpace = 'pre-line';
+      span.textContent = text || '';
+      el.appendChild(span);
+      const closeBtn = document.createElement('button');
+      closeBtn.textContent = '✕';
+      closeBtn.title = '关闭提示';
+      closeBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:14px;font-weight:700;color:inherit;padding:0 2px;line-height:1;flex-shrink:0;opacity:0.7;';
+      closeBtn.onmouseenter = function(){ this.style.opacity='1'; };
+      closeBtn.onmouseleave = function(){ this.style.opacity='0.7'; };
+      closeBtn.onclick = function(){ try{ el.innerHTML=''; el.style.display=''; }catch(_){} };
+      el.appendChild(closeBtn);
     }
     if (el2 && elementId !== 'sync-status') {
       // sync-status 作为副显示（不覆盖主提示）
@@ -30842,9 +30860,14 @@ try{
     }
     if (isError) {
       try{ if (typeof toast==='function') toast(text || '操作失败', 'error'); }catch(_){ }
-      // 失败：红色提示 8 秒后消失，并弹出 toast（避免“登录无反应”的错觉）
+      // 失败：红色提示 10 秒后消失，用户可手动关闭
       try{
-        setTimeout(()=>{ try{ if (el) el.textContent=''; }catch(_){ } }, 8000);
+        setTimeout(()=>{ try{ if (el && el.innerHTML) el.innerHTML=''; }catch(_){ } }, 10000);
+      }catch(_){}
+    } else {
+      // 成功：15 秒后自动消失，用户可手动关闭
+      try{
+        setTimeout(()=>{ try{ if (el && el.innerHTML) el.innerHTML=''; }catch(_){ } }, 15000);
       }catch(_){}
     }
   }
@@ -31431,15 +31454,27 @@ function parseGistFileContent(gistJson){
         return false;
       }
       const gistJson = await res.json();
-      // 校验文件存在 + JSON可解析
-      parseGistFileContent(gistJson);
+      // 软校验：尝试解析 tpi-data.json，但不合法时仅警告不阻断登录
+      let fileWarning = '';
+      try{
+        parseGistFileContent(gistJson);
+      }catch(parseErr){
+        // 文件不存在或内容非法JSON：允许登录，首次上传时会自动初始化
+        fileWarning = parseErr.message || String(parseErr);
+        console.warn('[Gist Login] tpi-data.json 解析警告（不影响登录）:', fileWarning);
+      }
 
       // 非敏感配置写 localStorage
       lsSet(KEY_USERNAME, username);
       lsSet(KEY_GIST_ID, gistId);
 
-      tpiShowMsg('tpi-sync-msg','✅ 已登录（Gist Token 已保存）', false);
-      toast('✅ 已登录（Gist Token 已持久保存，下次无需重新输入）', 'success');
+      if (fileWarning) {
+        tpiShowMsg('tpi-sync-msg',`✅ 已登录（Gist Token 已保存）\n⚠️ 提示：${fileWarning}\n首次上传时将自动创建/修复文件。`, false);
+        try{ if(typeof toast==='function') toast('✅ 已登录（首次上传将自动初始化数据文件）', 'success'); }catch(_){}
+      } else {
+        tpiShowMsg('tpi-sync-msg','✅ 已登录（Gist Token 已保存）', false);
+        try{ if(typeof toast==='function') toast('✅ 已登录（Gist Token 已持久保存，下次无需重新输入）', 'success'); }catch(_){}
+      }
       try{ updateAuthPanels(); }catch(e){}
       return true;
     }catch(err){
