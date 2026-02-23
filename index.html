@@ -16676,7 +16676,6 @@ const TPI = (function() {
             function initializeHeatmapCalendar() {
                 const container = document.getElementById('calendarHeatmap');
                 if (!container) return;
-                if (typeof HeatmapCalendar === 'undefined') { container.innerHTML = '<div style="color:#9ca3af;text-align:center;padding:20px;font-size:13px;">📅 热力图日历（库加载被浏览器跟踪防护拦截，功能暂不可用）</div>'; return; }
 
                 // 清空容器
                 container.innerHTML /*XSS-Safe*/ = '';
@@ -16707,6 +16706,11 @@ const TPI = (function() {
                 });
 
                 // 创建热力图日历
+                // HeatmapCalendar 库可能被浏览器跟踪防护拦截，需做 fallback
+                if (typeof HeatmapCalendar === 'undefined') {
+                    container.innerHTML = '<div style="padding:16px;text-align:center;color:#9ca3af;font-size:13px;">📅 热力图日历暂不可用（外部库被浏览器拦截）</div>';
+                    return;
+                }
                 const heatmap = new HeatmapCalendar(container, {
                     data: data,
                     colors: ['#ebedf0', '#9be9a8', '#40c463', '#30a14e', '#216e39'],
@@ -30829,27 +30833,31 @@ try{
     const el = $(elementId) || (elementId==='tpi-sync-msg' ? $('tpi-login-msg') : null);
     const el2 = $('sync-status'); // 兼容建议的 sync-status
     if (el) {
-      // 构建带关闭按钮的提示
+      // 清空旧内容，构建带关闭按钮的提示
       el.innerHTML = '';
+      el.style.display = 'flex';
+      el.style.alignItems = 'flex-start';
+      el.style.gap = '6px';
       el.style.whiteSpace = 'pre-line';
       el.style.color = isError ? '#dc2626' : '#065f46';
       el.style.fontWeight = isError ? '700' : '600';
-      el.style.display = 'flex';
-      el.style.alignItems = 'flex-start';
-      el.style.gap = '8px';
-      const span = document.createElement('span');
-      span.style.flex = '1';
-      span.style.whiteSpace = 'pre-line';
-      span.textContent = text || '';
-      el.appendChild(span);
-      const closeBtn = document.createElement('button');
-      closeBtn.textContent = '✕';
-      closeBtn.title = '关闭提示';
-      closeBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:14px;font-weight:700;color:inherit;padding:0 2px;line-height:1;flex-shrink:0;opacity:0.7;';
-      closeBtn.onmouseenter = function(){ this.style.opacity='1'; };
-      closeBtn.onmouseleave = function(){ this.style.opacity='0.7'; };
-      closeBtn.onclick = function(){ try{ el.innerHTML=''; el.style.display=''; }catch(_){} };
-      el.appendChild(closeBtn);
+      // 文本区域
+      const msgSpan = document.createElement('span');
+      msgSpan.style.flex = '1';
+      msgSpan.style.whiteSpace = 'pre-line';
+      msgSpan.textContent = text || '';
+      el.appendChild(msgSpan);
+      // 关闭按钮
+      const xBtn = document.createElement('button');
+      xBtn.textContent = '✕';
+      xBtn.title = '关闭';
+      xBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:15px;font-weight:700;line-height:1;color:inherit;padding:0 2px;flex-shrink:0;opacity:0.6;';
+      xBtn.addEventListener('mouseenter', function(){ this.style.opacity='1'; });
+      xBtn.addEventListener('mouseleave', function(){ this.style.opacity='0.6'; });
+      xBtn.addEventListener('click', function(){
+        try{ el.innerHTML=''; el.style.display='none'; }catch(e){}
+      });
+      el.appendChild(xBtn);
     }
     if (el2 && elementId !== 'sync-status') {
       // sync-status 作为副显示（不覆盖主提示）
@@ -30860,14 +30868,14 @@ try{
     }
     if (isError) {
       try{ if (typeof toast==='function') toast(text || '操作失败', 'error'); }catch(_){ }
-      // 失败：红色提示 10 秒后消失，用户可手动关闭
+      // 失败提示：10秒后自动消失（用户可手动点 ✕ 关闭）
       try{
-        setTimeout(()=>{ try{ if (el && el.innerHTML) el.innerHTML=''; }catch(_){ } }, 10000);
+        setTimeout(()=>{ try{ if (el && el.innerHTML){ el.innerHTML=''; el.style.display='none'; } }catch(_){} }, 10000);
       }catch(_){}
     } else {
-      // 成功：15 秒后自动消失，用户可手动关闭
+      // 成功提示：15秒后自动消失（用户可手动点 ✕ 关闭）
       try{
-        setTimeout(()=>{ try{ if (el && el.innerHTML) el.innerHTML=''; }catch(_){ } }, 15000);
+        setTimeout(()=>{ try{ if (el && el.innerHTML){ el.innerHTML=''; el.style.display='none'; } }catch(_){} }, 15000);
       }catch(_){}
     }
   }
@@ -31141,7 +31149,14 @@ function parseGistFileContent(gistJson){
         }
       }catch(e){}
 
-      const allData = parseGistFileContent(gistJson);
+      // 安全解析：文件不存在或非法JSON时自动初始化为{}
+      let allData = {};
+      try{
+        allData = parseGistFileContent(gistJson);
+      }catch(parseErr){
+        console.warn('[Gist Save] tpi-data.json 解析失败，将自动初始化为空:', parseErr.message);
+        allData = {};
+      }
 
       
       // ✅ 跨日期/里程碑功能需要：把该用户的“全量日期库”放到内存合并库中
@@ -31302,14 +31317,30 @@ function parseGistFileContent(gistJson){
         const updated = (gistJson && gistJson.updated_at) ? String(gistJson.updated_at) : '';
         if (updated) ssSet('tpi_gist_last_seen_updated_at', updated);
       }catch(e){}
-      const allData = parseGistFileContent(gistJson);
+      // 安全解析：文件不存在或非法JSON时返回空对象，给出友好提示
+      let allData = {};
+      try{
+        allData = parseGistFileContent(gistJson);
+      }catch(parseErr){
+        console.warn('[Gist Load] tpi-data.json 解析失败，返回空数据:', parseErr.message);
+        tpiShowMsg('tpi-sync-msg', '⚠️ 云端数据文件为空或格式异常。\n请先点击"上传"初始化数据文件后再下载。', false);
+        return {};
+      }
 
       // ✅ 跨日期/里程碑功能需要：把该用户的“全量日期库”放到内存合并库中（仅本会话，不做静默预加载）
       try{
         const userDb = (allData && typeof allData === 'object' && allData[username] && typeof allData[username]==='object') ? allData[username] : null;
         if (userDb && !Array.isArray(userDb)) {
           window.__TPI_CLOUD_CACHE__ = Object.assign({}, userDb);
-          window.__TPI_MERGED_DB__ = window.__TPI_MERGED_DB__ || {};
+      // 安全解析：文件不存在或非法JSON时返回空对象，给出友好提示
+      let allData = {};
+      try{
+        allData = parseGistFileContent(gistJson);
+      }catch(parseErr){
+        console.warn('[Gist Load] tpi-data.json 解析失败，返回空数据:', parseErr.message);
+        tpiShowMsg('tpi-sync-msg', '⚠️ 云端数据文件为空或格式异常。\n请先点击"上传"初始化数据文件后再下载。', false);
+        return {};
+      }
           Object.assign(window.__TPI_MERGED_DB__, userDb);
         }
       }catch(e){}
@@ -31453,27 +31484,27 @@ function parseGistFileContent(gistJson){
         tpiShowMsg('tpi-sync-msg',`❌ 登录失败：${res.status} ${res.statusText}`, true);
         return false;
       }
-      const gistJson = await res.json();
-      // 软校验：尝试解析 tpi-data.json，但不合法时仅警告不阻断登录
-      let fileWarning = '';
+      let loginGistJson = await res.json();
+
+      // 软校验：tpi-data.json 内容非法JSON时仅警告，不阻断登录
+      let jsonWarning = '';
       try{
-        parseGistFileContent(gistJson);
+        parseGistFileContent(loginGistJson);
       }catch(parseErr){
-        // 文件不存在或内容非法JSON：允许登录，首次上传时会自动初始化
-        fileWarning = parseErr.message || String(parseErr);
-        console.warn('[Gist Login] tpi-data.json 解析警告（不影响登录）:', fileWarning);
+        jsonWarning = parseErr.message || String(parseErr);
+        console.warn('[Gist Login] tpi-data.json 解析警告（不影响登录）:', jsonWarning);
       }
 
       // 非敏感配置写 localStorage
       lsSet(KEY_USERNAME, username);
       lsSet(KEY_GIST_ID, gistId);
 
-      if (fileWarning) {
-        tpiShowMsg('tpi-sync-msg',`✅ 已登录（Gist Token 已保存）\n⚠️ 提示：${fileWarning}\n首次上传时将自动创建/修复文件。`, false);
+      if (jsonWarning) {
+        tpiShowMsg('tpi-sync-msg', '✅ 登录成功！\n⚠️ ' + jsonWarning + '\n提示：首次点击"上传"将自动初始化数据文件。', false);
         try{ if(typeof toast==='function') toast('✅ 已登录（首次上传将自动初始化数据文件）', 'success'); }catch(_){}
       } else {
-        tpiShowMsg('tpi-sync-msg','✅ 已登录（Gist Token 已保存）', false);
-        try{ if(typeof toast==='function') toast('✅ 已登录（Gist Token 已持久保存，下次无需重新输入）', 'success'); }catch(_){}
+        tpiShowMsg('tpi-sync-msg', '✅ 已登录（Gist Token 已保存）', false);
+        try{ if(typeof toast==='function') toast('✅ 已登录，Token 已持久保存', 'success'); }catch(_){}
       }
       try{ updateAuthPanels(); }catch(e){}
       return true;
