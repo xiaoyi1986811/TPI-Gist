@@ -1469,7 +1469,6 @@ const FIELDS = {
   selectFields: [
     'tpi-rating', 'radar-time-mode', 'radar-recurrence',
     'radar-calendar-type', 'radar-recurrence-count',
-    'radar-remind-advance', 'radar-remind-sameday',
     'bcm-digital-status', 'bcm-afternoon-status',
     'hsm-core-status', 'hsm-morning-status', 'hsm-afternoon-status',
     'hsm-water-morning-status', 'hsm-water-afternoon-status', 'hsm-water-evening-status',
@@ -7314,65 +7313,34 @@ window.exportAsCSV = function() {
 <label style="font-weight:700; color:#1e293b; margin-bottom:10px; display:block;">
             🔔 多级预警系统
            </label>
-<div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
-<div>
-<label class="tpi-u-8ba16d">
-              📅 提前预警 (天)
+<div style="display:grid; grid-template-columns: 1fr; gap:12px;">
+<div style="grid-column: 1 / -1;">
+<label class="tpi-u-8ba16d" style="display:block; margin-bottom:6px;">
+              📅 提前预警 (天) — 可多选
              </label>
-<select id="radar-remind-advance" style="width:100%;">
-<option value="0">
-               不提前
-              </option>
-<option value="1">
-               提前 1 天
-              </option>
-<option value="2">
-               提前 2 天
-              </option>
-<option value="3">
-               提前 3 天
-              </option>
-<option value="4">
-               提前 4 天
-              </option>
-<option value="5">
-               提前 5 天
-              </option>
-<option value="7">
-               提前 1 周
-              </option>
-</select>
+<div id="radar-remind-advance-group" style="display:flex; flex-wrap:wrap; gap:8px;">
+  <label style="display:flex;align-items:center;gap:4px;font-weight:normal;cursor:pointer;"><input type="checkbox" class="radar-advance-cb" value="0"> 当天</label>
+  <label style="display:flex;align-items:center;gap:4px;font-weight:normal;cursor:pointer;"><input type="checkbox" class="radar-advance-cb" value="1" checked> 1天前</label>
+  <label style="display:flex;align-items:center;gap:4px;font-weight:normal;cursor:pointer;"><input type="checkbox" class="radar-advance-cb" value="2"> 2天前</label>
+  <label style="display:flex;align-items:center;gap:4px;font-weight:normal;cursor:pointer;"><input type="checkbox" class="radar-advance-cb" value="3"> 3天前</label>
+  <label style="display:flex;align-items:center;gap:4px;font-weight:normal;cursor:pointer;"><input type="checkbox" class="radar-advance-cb" value="4"> 4天前</label>
+  <label style="display:flex;align-items:center;gap:4px;font-weight:normal;cursor:pointer;"><input type="checkbox" class="radar-advance-cb" value="5"> 5天前</label>
+  <label style="display:flex;align-items:center;gap:4px;font-weight:normal;cursor:pointer;"><input type="checkbox" class="radar-advance-cb" value="7"> 1周前</label>
 </div>
-<div>
-<label class="tpi-u-8ba16d">
-              ⏰ 当天精细提醒（提前分钟）
+</div>
+<div style="grid-column: 1 / -1;">
+<label class="tpi-u-8ba16d" style="display:block; margin-bottom:6px;">
+              ⏰ 当天精细提醒（提前分钟）— 可多选
              </label>
-<select id="radar-remind-sameday" style="width:100%;">
-<option value="0">
-               不提醒
-              </option>
-<option value="15">
-               15 分钟
-              </option>
-<option value="30">
-               30 分钟
-              </option>
-<option value="45">
-               45 分钟
-              </option>
-<option value="60">
-               60 分钟
-              </option>
-<option value="75">
-               75 分钟
-              </option>
-<option value="90">
-               90 分钟
-              </option>
-<option value="120">
-               120 分钟
-              </option>
-</select>
+<div id="radar-remind-sameday-group" style="display:flex; flex-wrap:wrap; gap:8px;">
+  <label style="display:flex;align-items:center;gap:4px;font-weight:normal;cursor:pointer;"><input type="checkbox" class="radar-sameday-cb" value="15"> 15分钟</label>
+  <label style="display:flex;align-items:center;gap:4px;font-weight:normal;cursor:pointer;"><input type="checkbox" class="radar-sameday-cb" value="30"> 30分钟</label>
+  <label style="display:flex;align-items:center;gap:4px;font-weight:normal;cursor:pointer;"><input type="checkbox" class="radar-sameday-cb" value="45"> 45分钟</label>
+  <label style="display:flex;align-items:center;gap:4px;font-weight:normal;cursor:pointer;"><input type="checkbox" class="radar-sameday-cb" value="60"> 60分钟</label>
+  <label style="display:flex;align-items:center;gap:4px;font-weight:normal;cursor:pointer;"><input type="checkbox" class="radar-sameday-cb" value="75"> 75分钟</label>
+  <label style="display:flex;align-items:center;gap:4px;font-weight:normal;cursor:pointer;"><input type="checkbox" class="radar-sameday-cb" value="90"> 90分钟</label>
+  <label style="display:flex;align-items:center;gap:4px;font-weight:normal;cursor:pointer;"><input type="checkbox" class="radar-sameday-cb" value="120"> 120分钟</label>
+</div>
 </div>
 </div>
 <div style="display:flex; flex-direction:column; gap:8px;">
@@ -8388,11 +8356,13 @@ try {
         const fileListElem = document.getElementById('file-list-display');
         if (fileListElem) fileListElem.innerText = '';
         
-        const remindAdvElem = document.getElementById('radar-remind-advance');
-        if (remindAdvElem) remindAdvElem.value = '1';
-        
-        const remindSamElem = document.getElementById('radar-remind-sameday');
-        if (remindSamElem) remindSamElem.value = '0';
+        // 重置多选提醒 checkbox（默认选中"1天前"）
+        document.querySelectorAll('.radar-advance-cb').forEach(cb => {
+            cb.checked = (cb.value === '1');
+        });
+        document.querySelectorAll('.radar-sameday-cb').forEach(cb => {
+            cb.checked = false;
+        });
 
         // ===== v3.1 新增：默认优先级 1 星（并确保 UI 注入） =====
         this.ensurePriorityUI();
@@ -8481,8 +8451,11 @@ try {
         const locationElem = document.getElementById('radar-location');
         const organizerElem = document.getElementById('radar-organizer');
         const sourceUrlElem = document.getElementById('radar-source-url');
-        const remindAdvanceElem = document.getElementById('radar-remind-advance');
-        const remindSamedayElem = document.getElementById('radar-remind-sameday');
+        // 多选：读取所有选中的 checkbox 值，存为数组
+        const remindAdvanceCbs = document.querySelectorAll('.radar-advance-cb:checked');
+        const remindSamedayCbs = document.querySelectorAll('.radar-sameday-cb:checked');
+        const remindAdvanceElem = null; // 兼容旧引用（已改为 checkbox）
+        const remindSamedayElem = null;
         const reminderActiveElem = document.getElementById('radar-reminder-active');
         const importantElem = document.getElementById('radar-important');
         const priorityVal = this.getPrioritySelection();
@@ -8513,10 +8486,10 @@ try {
             remarks: remarks,
             attachments: fileList,
 
-            // 双重提醒
-            remindAdvanceDays: remindAdvanceElem ? remindAdvanceElem.value : '1',
-            remindSameDayMins: remindSamedayElem ? remindSamedayElem.value : '0',
-            remindDays: remindAdvanceElem ? remindAdvanceElem.value : '1',
+            // 多选提醒字段（存为数组）
+            remindAdvanceDays: [...remindAdvanceCbs].map(c => parseInt(c.value)),
+            remindSameDayMins: [...remindSamedayCbs].map(c => parseInt(c.value)),
+            remindDays: [...remindAdvanceCbs].map(c => parseInt(c.value)),
 
             reminderActive: reminderActiveElem ? reminderActiveElem.checked : true,
             priority: this.normalizePriority(priorityVal),
@@ -8626,9 +8599,19 @@ try {
             document.getElementById('file-list-display').innerText = `包含 ${item.attachments.length} 个附件: ${item.attachments.join(', ')}`;
         }
 
-        // 回填提醒
-        document.getElementById('radar-remind-advance').value = item.remindAdvanceDays || item.remindDays || 1;
-        document.getElementById('radar-remind-sameday').value = item.remindSameDayMins || 0;
+        // 回填提醒（多选checkbox）
+        const advVals = Array.isArray(item.remindAdvanceDays)
+            ? item.remindAdvanceDays.map(Number)
+            : [parseInt(item.remindAdvanceDays || item.remindDays || 1)];
+        document.querySelectorAll('.radar-advance-cb').forEach(cb => {
+            cb.checked = advVals.includes(parseInt(cb.value));
+        });
+        const samVals = Array.isArray(item.remindSameDayMins)
+            ? item.remindSameDayMins.map(Number)
+            : (parseInt(item.remindSameDayMins) > 0 ? [parseInt(item.remindSameDayMins)] : []);
+        document.querySelectorAll('.radar-sameday-cb').forEach(cb => {
+            cb.checked = samVals.includes(parseInt(cb.value));
+        });
 
         document.getElementById('radar-reminder-active').checked = item.reminderActive !== false;
         if (document.getElementById('radar-important')) {
@@ -9553,10 +9536,12 @@ const current = (this.sortMode && this.sortMode[key]) ? this.sortMode[key] : 'pr
             this.data[category].forEach(i => {
                 if (!i.completed && i.reminderActive) {
                     const d = this.daysLeft(i.date, i.dateEnd);
-                    // 统一用 parseInt 处理，兼容 remindAdvanceDays 和 remindDays 两个字段名
-                    const remindDays = parseInt(i.remindAdvanceDays || i.remindDays || 1);
+                    // 兼容单值（旧数据）和数组（新多选数据）
+                    const remindDaysArr = Array.isArray(i.remindAdvanceDays)
+                        ? i.remindAdvanceDays.map(Number)
+                        : [parseInt(i.remindAdvanceDays || i.remindDays || 1)];
                     const isInProgress = i.dateEnd && new Date(i.date) <= new Date() && new Date(i.dateEnd) >= new Date();
-                    if (!isInProgress && d >= 0 && (d <= remindDays || (i.isImportant && d <= 3))) {
+                    if (!isInProgress && d >= 0 && (remindDaysArr.some(rd => d <= rd) || (i.isImportant && d <= 3))) {
                         let prefix = '';
                         if (i.isImportant) prefix += '⭐';
                         if (d === 0) prefix += '🔥 【今天】';
@@ -9602,20 +9587,26 @@ const current = (this.sortMode && this.sortMode[key]) ? this.sortMode[key] : 'pr
                 this.data[category].forEach(item => {
                     if (item.completed || !item.reminderActive) return;
                     if (item.date !== todayStr) return;
-                    const sameDayMins = parseInt(item.remindSameDayMins) || 0;
-                    if (sameDayMins <= 0) return;
+                    // 兼容单值（旧数据）和数组（新多选数据）
+                    const sameDayMinsArr = Array.isArray(item.remindSameDayMins)
+                        ? item.remindSameDayMins.map(Number).filter(v => v > 0)
+                        : (parseInt(item.remindSameDayMins) > 0 ? [parseInt(item.remindSameDayMins)] : []);
+                    if (sameDayMinsArr.length === 0) return;
                     const timeStr = item.timeStart || item.time || '';
                     if (!timeStr) return;
                     const match = timeStr.match(/(\d{1,2}):(\d{2})/);
                     if (!match) return;
                     const eventMins = parseInt(match[1]) * 60 + parseInt(match[2]);
                     const diffMins = eventMins - nowMins;
-                    if (diffMins >= 0 && diffMins <= sameDayMins) {
-                        const sentKey = `${todayStr}_${item.id}_${sameDayMins}`;
-                        if (!this._sentSameDayKeys.has(sentKey)) {
-                            toSend.push({ item, diffMins, sentKey });
+                    // 每个档位独立检查和去重
+                    sameDayMinsArr.forEach(threshold => {
+                        if (diffMins >= 0 && diffMins <= threshold) {
+                            const sentKey = `${todayStr}_${item.id}_${threshold}`;
+                            if (!this._sentSameDayKeys.has(sentKey)) {
+                                toSend.push({ item, diffMins, sentKey, threshold });
+                            }
                         }
-                    }
+                    });
                 });
             });
 
