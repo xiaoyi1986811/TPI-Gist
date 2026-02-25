@@ -7417,7 +7417,7 @@ window.exportAsCSV = function() {
           🔔 PushPlus配置
          </button>
 <button class="settings-tab tpi-u-dc3df4" id="settings-tab-worker" onclick="FutureRadar.switchSettingsTab('worker')">
-          ☁️ 后台Worker
+          ☁️ 后台推送Worker
          </button>
 <button class="settings-tab tpi-u-dc3df4" id="settings-tab-import" onclick="FutureRadar.switchSettingsTab('import')">
           📥 爬虫导入
@@ -7435,58 +7435,118 @@ window.exportAsCSV = function() {
 <input id="radar-push-token" placeholder="请输入您的PushPlus Token" style="width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px;" type="text"/>
 <p style="margin-top: 8px; font-size: 12px; color: #6b7280;">
            📌 如何获取Token: 访问
-           <a href="https://www.pushplus.plus/" style="color: #3b82f6;" target="_blank" rel="noopener noreferrer">
+           <a href="https://www.pushplus.plus/" style="color: #3b82f6;" target="_blank">
             pushplus.plus
            </a>
            注册并获取您的专属Token
           </p>
 </div>
+<!-- ✅ 新增：测试推送按钮 -->
 <div style="margin-bottom: 16px;">
-<button id="radar-test-push-btn" onclick="FutureRadar.testPush()" style="padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; width: 100%;">
-           📨 发送测试消息
-          </button>
+  <button id="radar-test-push-btn" onclick="FutureRadar.testPush()" style="width:100%; padding: 10px; background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s;">
+    📨 发送测试消息（验证是否通畅）
+  </button>
+  <p style="margin-top: 6px; font-size: 12px; color: #6b7280; text-align: center;">点击后若手机收到消息，说明配置正确</p>
 </div>
 <div style="background: #f3f4f6; padding: 12px; border-radius: 8px; font-size: 13px; color: #4b5563;">
 <div style="font-weight: 600; margin-bottom: 8px;">
            💡 功能说明
           </div>
 <ul style="margin: 0; padding-left: 20px;">
-<li>每天首次打开系统时自动推送待办摘要</li>
-<li>将符合提醒条件的事件推送到您的设备</li>
-<li>重要事件会在剩余3天内强制提醒</li>
-<li>当天精细提醒（提前X分钟）每分钟自动检查</li>
-<li>⚠️ 页面关闭后提醒暂停，部署 Worker 可实现后台推送</li>
+<li>
+            每天首次打开页面时自动检查「提前N天」事件并推送
+           </li>
+<li>
+            页面保持打开时，每分钟自动检查「当天精细提醒」
+           </li>
+<li>
+            ⭐ 重要事件在剩余 3 天内强制提醒（不受提前天数限制）
+           </li>
+           <li style="color: #dc2626; font-weight: 600;">
+            ⚠️ 当天精细提醒需要页面保持打开状态才能触发
+           </li>
 </ul>
 </div>
 </div>
-<!-- 后台Worker标签页 -->
+<!-- ☁️ 后台推送 Worker 标签页 -->
 <div class="settings-content" id="settings-content-worker" style="display:none">
-<div style="margin-bottom: 14px;">
-<label style="display: block; margin-bottom: 6px; font-weight: 600;">Worker URL</label>
-<input id="radar-worker-url" type="text" placeholder="https://tpi-reminder-worker.你的账号.workers.dev" style="width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box;"/>
-<p style="margin-top: 6px; font-size: 12px; color: #6b7280;">部署 Cloudflare Worker 后，此处填入 Worker 地址，即可实现关闭网页也能推送提醒。</p>
+
+  <!-- 状态区 -->
+  <div id="worker-status-banner" style="display:none; padding:10px 14px; border-radius:8px; margin-bottom:14px; font-size:13px; font-weight:600;"></div>
+
+  <!-- Worker URL 配置 -->
+  <div style="margin-bottom:14px;">
+    <label style="display:block; margin-bottom:6px; font-weight:600;">☁️ Cloudflare Worker 地址</label>
+    <input id="radar-worker-url" type="text"
+      placeholder="https://tpi-reminder-worker.你的账号.workers.dev"
+      style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:6px; font-size:13px;"/>
+    <p style="margin-top:6px; font-size:12px; color:#6b7280;">
+      部署 Worker 后将其 URL 填入此处，即可实现关闭网页也能收到推送
+    </p>
+  </div>
+
+  <!-- 操作按钮行 -->
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:14px;">
+    <button onclick="FutureRadar.testWorkerConnection()"
+      style="padding:9px; background:linear-gradient(135deg,#3b82f6,#1d4ed8); color:#fff; border:none; border-radius:8px; font-weight:600; cursor:pointer; font-size:13px;">
+      🔗 测试连接
+    </button>
+    <button onclick="FutureRadar.triggerWorkerNow('daily')"
+      style="padding:9px; background:linear-gradient(135deg,#10b981,#059669); color:#fff; border:none; border-radius:8px; font-weight:600; cursor:pointer; font-size:13px;">
+      📋 立即触发每日推送
+    </button>
+    <button onclick="FutureRadar.triggerWorkerNow('sameday')"
+      style="padding:9px; background:linear-gradient(135deg,#f59e0b,#d97706); color:#fff; border:none; border-radius:8px; font-weight:600; cursor:pointer; font-size:13px;">
+      ⏰ 立即检查精细提醒
+    </button>
+    <button onclick="FutureRadar.triggerWorkerNow('test')"
+      style="padding:9px; background:linear-gradient(135deg,#06b6d4,#0891b2); color:#fff; border:none; border-radius:8px; font-weight:600; cursor:pointer; font-size:13px;">
+      🧪 测试推送通道
+    </button>
+
+    <button onclick="FutureRadar.saveWorkerConfig()"
+      style="padding:9px; background:linear-gradient(135deg,#8b5cf6,#6d28d9); color:#fff; border:none; border-radius:8px; font-weight:600; cursor:pointer; font-size:13px;">
+      💾 保存 Worker 配置
+    </button>
+  </div>
+
+  <!-- 说明区 -->
+  <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:12px; font-size:12px; color:#166534; margin-bottom:12px;">
+    <div style="font-weight:700; margin-bottom:6px;">✅ 配置后的推送能力</div>
+    <div style="display:grid; gap:4px;">
+      <div>📋 <strong>每天 07:30</strong>（北京时间）自动推送当天及近期所有待办事项</div>
+      <div>⏰ <strong>每 15 分钟</strong>检查当天精细提醒，无需网页保持打开</div>
+      <div>🔁 Gist 备份后数据自动同步，Worker 每次运行时读取最新事件</div>
+    </div>
+  </div>
+
+  <!-- 部署步骤 -->
+  <details style="border:1px solid #e5e7eb; border-radius:8px; overflow:hidden;">
+    <summary style="padding:10px 14px; background:#f9fafb; cursor:pointer; font-weight:600; font-size:13px; user-select:none;">
+      📖 如何部署 Cloudflare Worker？（点击展开）
+    </summary>
+    <div style="padding:14px; font-size:12px; color:#374151; line-height:1.8;">
+      <div style="margin-bottom:8px;"><strong>① 前提：</strong>注册 <a href="https://cloudflare.com" target="_blank" style="color:#3b82f6;">Cloudflare 账号</a>（免费），安装 Node.js</div>
+      <div style="margin-bottom:8px;"><strong>② 获取 GitHub Token：</strong>GitHub → Settings → Developer settings → Personal access tokens，创建勾选 <code>gist</code> 权限的 token</div>
+      <div style="margin-bottom:8px;"><strong>③ 执行以下命令：</strong></div>
+      <pre style="background:#1e1e1e; color:#d4d4d4; padding:10px; border-radius:6px; overflow-x:auto; font-size:11px; line-height:1.6;">npm install -g wrangler
+wrangler login
+
+# 创建 KV 命名空间（粘贴返回的 ID 到 wrangler.toml）
+npx wrangler kv:namespace create TPI_REMINDER_KV
+npx wrangler kv:namespace create TPI_REMINDER_KV --preview
+
+# 设置密钥
+npx wrangler secret put GITHUB_TOKEN
+npx wrangler secret put PUSHPLUS_TOKEN
+
+# 部署
+npx wrangler deploy</pre>
+      <div style="margin-top:8px; color:#6b7280;">Worker 文件（worker.js / wrangler.toml）已随本网页一同提供，解压后在文件夹内执行上述命令即可。</div>
+    </div>
+  </details>
 </div>
-<div style="display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap;">
-<button onclick="FutureRadar.testWorkerConnection()" style="padding: 7px 14px; background: #6366f1; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px;">🔗 测试连接</button>
-<button onclick="FutureRadar.triggerWorkerNow('daily')" style="padding: 7px 14px; background: #0ea5e9; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px;">📋 立即触发每日推送</button>
-<button onclick="FutureRadar.triggerWorkerNow('sameday')" style="padding: 7px 14px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px;">⏰ 立即检查精细提醒</button>
-<button onclick="FutureRadar.saveWorkerUrl()" style="padding: 7px 14px; background: #f59e0b; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px;">💾 保存</button>
-</div>
-<div id="radar-worker-status" style="margin-bottom: 14px; font-size: 12px; min-height: 18px;"></div>
-<details style="font-size: 12px; color: #6b7280; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px;">
-<summary style="font-weight: 600; cursor: pointer; color: #374151;">📖 Worker 部署步骤（点击展开）</summary>
-<ol style="margin: 10px 0 0 0; padding-left: 18px; line-height: 1.8;">
-<li>在雷达设置中点一次「Gist 备份」确保数据已同步</li>
-<li>前往 <a href="https://github.com/settings/tokens" target="_blank" style="color:#3b82f6;">GitHub → Settings → Developer settings → PAT</a>，创建勾选 <code>gist</code> 权限的 Token</li>
-<li>安装工具：<code>npm install -g wrangler && wrangler login</code></li>
-<li>解压 Worker 包，进入目录，执行：<br><code>npx wrangler kv:namespace create TPI_REMINDER_KV</code><br>将返回的 ID 填入 wrangler.toml</li>
-<li><code>npx wrangler secret put GITHUB_TOKEN</code>（粘贴 GitHub Token）<br><code>npx wrangler secret put PUSHPLUS_TOKEN</code>（粘贴 PushPlus Token）</li>
-<li><code>npx wrangler deploy</code>，复制返回的 Worker URL 填入上方</li>
-<li>点「🔗 测试连接」确认绿色成功后保存</li>
-</ol>
-<p style="margin-top: 8px; color: #374151;">之后 Worker 自动每天 <strong>07:30</strong> 推送每日摘要，每 <strong>15 分钟</strong>检查精细提醒，无需打开网页。</p>
-</details>
-</div>
+
 <!-- 爬虫导入标签页 -->
 <div class="settings-content" id="settings-content-import" style="display:none">
 <p class="text-muted" style="margin-bottom: 12px;">
@@ -9617,6 +9677,116 @@ const current = (this.sortMode && this.sortMode[key]) ? this.sortMode[key] : 'pr
 
 const FutureRadar = new FutureRadarSystemV3();
 window.FutureRadar = FutureRadar; // 暴露给插件使用
+
+/* ============================================================
+ *  FutureRadar：对齐多云端同步版（未来事件雷达-设置 / 后台Worker）
+ *  说明：不重构，仅覆盖/补齐 Worker 相关方法与 UI 行为
+ * ============================================================ */
+(function(){
+  try{
+    if(!window.FutureRadar) return;
+
+    // 与多云端同步版一致：切 tab 时回填 Worker URL，并显示状态横幅
+    window.FutureRadar.switchSettingsTab = function(tabName){
+      const tabs = ['push', 'worker', 'import', 'fileimport'];
+      tabs.forEach(tab => {
+        const tabBtn = document.getElementById('settings-tab-' + tab);
+        const tabContent = document.getElementById('settings-content-' + tab);
+        if (!tabBtn || !tabContent) return;
+        if (tab === tabName) {
+          tabBtn.classList.add('active');
+          tabContent.style.display = 'block';
+        } else {
+          tabBtn.classList.remove('active');
+          tabContent.style.display = 'none';
+        }
+      });
+
+      if (tabName === 'worker') {
+        const urlInput = document.getElementById('radar-worker-url');
+        if (urlInput) {
+          const saved = __tpi_ls_get('tpi_radar_worker_url') || '';
+          urlInput.value = saved;
+          if (saved) this._workerStatusBanner && this._workerStatusBanner('已配置 Worker：' + saved, 'info');
+        }
+      }
+    };
+
+    // Worker 标签页状态横幅
+    window.FutureRadar._workerStatusBanner = function(msg, type = 'info'){
+      const el = document.getElementById('worker-status-banner');
+      if (!el) return;
+      const styles = {
+        info:    'background:#eff6ff; border:1px solid #bfdbfe; color:#1e40af;',
+        success: 'background:#f0fdf4; border:1px solid #bbf7d0; color:#166534;',
+        error:   'background:#fef2f2; border:1px solid #fecaca; color:#991b1b;',
+        loading: 'background:#fffbeb; border:1px solid #fde68a; color:#92400e;',
+      };
+      el.style.cssText = `display:block; padding:10px 14px; border-radius:8px; margin-bottom:14px; font-size:13px; font-weight:600; ${styles[type] || styles.info}`;
+      el.textContent = msg;
+    };
+
+    window.FutureRadar._getWorkerUrl = function(){
+      return __tpi_ls_get('tpi_radar_worker_url') || '';
+    };
+
+    // 保存 Worker URL（对齐多云端同步版）
+    window.FutureRadar.saveWorkerConfig = function(){
+      const url = (document.getElementById('radar-worker-url')?.value || '').trim();
+      if (!url) { this._workerStatusBanner('⚠️ 请先填写 Worker URL', 'error'); return; }
+      if (!url.startsWith('https://')) { this._workerStatusBanner('⚠️ URL 必须以 https:// 开头', 'error'); return; }
+      __tpi_ls_set('tpi_radar_worker_url', url);
+      this._workerStatusBanner('✅ Worker URL 已保存：' + url, 'success');
+      this.showSimpleNotification && this.showSimpleNotification('✅ Worker 配置已保存', 'success');
+    };
+
+    // 兼容旧按钮：saveWorkerUrl -> saveWorkerConfig
+    window.FutureRadar.saveWorkerUrl = function(){ return this.saveWorkerConfig(); };
+
+    // 测试 Worker 连接（对齐多云端同步版）
+    window.FutureRadar.testWorkerConnection = async function(){
+      const url = document.getElementById('radar-worker-url')?.value?.trim() || this._getWorkerUrl();
+      if (!url) { this._workerStatusBanner('⚠️ 请先填写 Worker URL', 'error'); return; }
+      this._workerStatusBanner('🔄 正在连接 Worker...', 'loading');
+      try{
+        const resp = await fetch(url + '/status', { signal: AbortSignal.timeout(10000) });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const data = await resp.json();
+        this._workerStatusBanner(
+          `✅ Worker 连接正常！北京时间：${data.time_beijing}  |  今天：${data.today_beijing}  |  GitHub Token：${data.github_token_set ? '已配置✓' : '未配置✗'}  |  PushPlus Token：${data.pushplus_token_set ? '已配置✓' : '未配置✗'}`,
+          'success'
+        );
+      }catch(e){
+        this._workerStatusBanner('❌ 连接失败：' + e.message + '（请检查 Worker URL 是否正确，或 Worker 是否已部署）', 'error');
+      }
+    };
+
+    // 手动触发 Worker 推送（daily / sameday / test）
+    window.FutureRadar.triggerWorkerNow = async function(type){
+      const url = document.getElementById('radar-worker-url')?.value?.trim() || this._getWorkerUrl();
+      if (!url) { this._workerStatusBanner('⚠️ 请先填写并保存 Worker URL', 'error'); return; }
+      const labelMap = { daily: '每日摘要推送', sameday: '当天精细提醒检查', test: '推送通道测试' };
+      this._workerStatusBanner(`🔄 正在触发 ${labelMap[type] || type}...`, 'loading');
+      try{
+        const resp = await fetch(`${url}/trigger/${type}`, { signal: AbortSignal.timeout(30000) });
+        const text = await resp.text();
+        if (resp.ok) {
+          this._workerStatusBanner(`✅ ${text}`, 'success');
+          this.showSimpleNotification && this.showSimpleNotification('✅ ' + text, 'success');
+        } else {
+          this._workerStatusBanner('❌ Worker 返回错误：' + text, 'error');
+        }
+      }catch(e){
+        this._workerStatusBanner('❌ 请求失败：' + e.message, 'error');
+      }
+    };
+
+  }catch(e){
+    // 静默失败，避免影响主站
+    console && console.warn && console.warn('[FutureRadar align patch] failed:', e);
+  }
+})();
+
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => FutureRadar.init());
 else FutureRadar.init();
 
