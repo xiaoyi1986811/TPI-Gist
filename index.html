@@ -4468,7 +4468,7 @@ if (typeof window.showModal === 'undefined') {
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 10000;
+            z-index: 999999;
             animation: modalFadeIn 0.2s ease-out;
         `;
         
@@ -4501,11 +4501,12 @@ if (typeof window.showModal === 'undefined') {
         }
         
         content.innerHTML = `
-            <div class="modal-header" style="padding: 20px; border-bottom: 1px solid #e5e7eb;">
+            <div class="modal-header" style="padding: 20px; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; justify-content: space-between;">
                 <div style="display: flex; align-items: center; gap: 12px;">
                     <div style="font-size: 24px;">${icon}</div>
                     <h3 style="margin: 0; font-size: 18px; font-weight: 600; color: #111827;">${title}</h3>
                 </div>
+                <button class="modal-close-x-btn" type="button" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 20px; color: #9ca3af; padding: 4px 8px; border-radius: 6px; line-height: 1; transition: all 0.15s; flex-shrink: 0;">✕</button>
             </div>
             <div class="modal-body" style="padding: 20px;">
                 ${message}
@@ -4520,7 +4521,9 @@ if (typeof window.showModal === 'undefined') {
         document.body.appendChild(modal);
         
         // 关闭函数
+        var _escHandler = null; // ✅ 修复：提前声明，避免闭包TDZ问题
         const closeModal = () => {
+            if (_escHandler) document.removeEventListener('keydown', _escHandler);
             modal.style.animation = 'modalFadeOut 0.2s ease-out';
             content.style.animation = 'modalScaleOut 0.2s ease-out';
             setTimeout(() => {
@@ -4578,6 +4581,29 @@ if (typeof window.showModal === 'undefined') {
                 }
             });
         }
+        
+        // ✅ 修复：× 关闭按钮（始终可关闭）
+        const closeXBtn = content.querySelector('.modal-close-x-btn');
+        if (closeXBtn) {
+            closeXBtn.addEventListener('click', (e) => { try{ e.preventDefault(); e.stopPropagation(); }catch(_){ }
+                console.log('❌ [showModal] 用户点击×关闭');
+                if (onCancel) onCancel();
+                closeModal();
+            });
+            closeXBtn.addEventListener('mouseover', () => { closeXBtn.style.background = '#f3f4f6'; closeXBtn.style.color = '#374151'; });
+            closeXBtn.addEventListener('mouseout', () => { closeXBtn.style.background = 'none'; closeXBtn.style.color = '#9ca3af'; });
+        }
+        
+        // ✅ 修复：ESC 键关闭
+        _escHandler = (e) => {
+            if (e.key === 'Escape') {
+                console.log('❌ [showModal] ESC键关闭');
+                document.removeEventListener('keydown', _escHandler);
+                if (onCancel) onCancel();
+                closeModal();
+            }
+        };
+        document.addEventListener('keydown', _escHandler);
         
         // 自动关闭
         if (autoClose > 0) {
@@ -22912,7 +22938,8 @@ function showStorageCriticalModal(currentSize, maxSize, percentage) {
     type: 'error',
     title: '🚨 存储空间严重不足',
     message: '<div style="text-align: left;"><div style="background: #fee2e2; border-left: 4px solid #dc2626; padding: 15px; margin: 15px 0; border-radius: 4px;"><p style="margin: 0; font-weight: bold; color: #991b1b;">⚠️ 存储空间已使用 ' + percentage.toFixed(1) + '%</p><p style="margin: 10px 0 0 0; color: #7f1d1d;">当前: ' + currentSize + ' MB / ' + maxSize + ' MB<br><strong>您必须立即清理数据，否则无法保存新数据！</strong></p></div><h4>请选择一个操作：</h4><div style="display: flex; flex-direction: column; gap: 10px; margin-top: 15px;"><button onclick="autoCleanOldData(30); closeAllModals();" class="modal-button modal-button-primary tpi-inline-02">🗑️ 自动清理30天前的数据（推荐）</button><button onclick="autoCleanOldData(60); closeAllModals();" class="modal-button" style="width: 100%; background: #3b82f6; color: white;">🗑️ 自动清理60天前的数据</button><button onclick="exportAndResetAll(); closeAllModals();" class="modal-button" style="width: 100%; background: #dc2626; color: white;">💾 导出全部数据后重置系统</button></div></div>',
-    showCancel: false,
+    showCancel: true,
+    cancelText: '稍后处理',
     showConfirm: false
   });
 }
@@ -32954,5 +32981,69 @@ function fillFieldLTemplate(selectEl) {
   } catch(e) {}
 }
 </script>
+
+<!-- =========================================================
+     Hotfix (2026-02-26)
+     方案C：保留存储占用显示（storage-usage-info），关闭“存储空间不足”弹窗/Toast
+     - 不改布局/不改数据结构/不影响同步与导出
+========================================================= -->
+<script>
+(function(){
+  'use strict';
+  // 全局开关（便于后续排查）
+  window.__TPI_DISABLE_STORAGE_POPUPS__ = true;
+
+  // 1) 禁用与存储相关的弹窗函数（若存在）
+  ['showStorageCriticalModal','showStorageWarningModal','showStorageFullModal'].forEach(function(fn){
+    try{
+      if (typeof window[fn] === 'function') {
+        window[fn] = function(){ /* disabled by __TPI_DISABLE_STORAGE_POPUPS__ */ };
+      }
+    }catch(e){}
+  });
+
+  // 2) 覆盖 checkStorageUsage：只更新 UI，不弹窗、不 toast、不拦截保存
+  //    （原函数可能在 >95% 时 return false；这里统一返回 true）
+  try{
+    window.checkStorageUsage = function(){
+      try{
+        var totalSize = 0;
+        var obj = (typeof window.__tpi_ls_obj === 'function') ? window.__tpi_ls_obj() : null;
+        if (obj && typeof obj === 'object') {
+          for (var key in obj) {
+            if (!Object.prototype.hasOwnProperty.call(obj, key)) continue;
+            // 仅统计 tpi_ 开头的数据键（保持与原逻辑一致）
+            if (String(key).startsWith('tpi_')) {
+              var v = obj[key];
+              var len = 0;
+              try{ len = (v && v.length !== undefined) ? v.length : (JSON.stringify(v||'').length); }catch(e){ len = 0; }
+              totalSize += (len + String(key).length) * 2; // 近似：UTF-16
+            }
+          }
+        }
+
+        var sizeInMB = (totalSize / (1024 * 1024));
+        var maxSizeMB = (window.__idbQuotaMB && window.__idbQuotaMB > 10) ? window.__idbQuotaMB : 2048;
+        var percentage = maxSizeMB ? (sizeInMB / maxSizeMB) * 100 : 0;
+
+        var storageInfo = document.getElementById('storage-usage-info');
+        if (storageInfo) {
+          var maxLabel = (maxSizeMB >= 1024) ? ((maxSizeMB/1024).toFixed(1) + ' GB') : (maxSizeMB + ' MB');
+          storageInfo.textContent = sizeInMB.toFixed(2) + ' MB / ' + maxLabel + ' (' + percentage.toFixed(1) + '%)';
+          // 仅变色提示，不弹窗
+          storageInfo.style.color = (percentage > 90) ? '#dc2626' : (percentage > 75) ? '#f59e0b' : '#10b981';
+        }
+
+        return true;
+      }catch(e){
+        try{ console.error('存储检查失败(已静默弹窗):', e); }catch(_){}
+        return true;
+      }
+    };
+  }catch(e){}
+
+})();
+</script>
+
 </body>
 </html>
