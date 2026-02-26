@@ -7436,6 +7436,12 @@ window.exportAsCSV = function() {
           </p>
 </div>
 <!-- ✅ 新增：测试推送按钮 -->
+<div style="margin-bottom: 12px;">
+  <button onclick="FutureRadar.savePushToken()" style="width:100%; padding: 10px; background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s;">
+    💾 保存Token配置
+  </button>
+  <p style="margin-top: 6px; font-size: 12px; color: #6b7280; text-align: center;">点击后Token将被保存，下次打开页面自动加载</p>
+</div>
 <div style="margin-bottom: 16px;">
   <button id="radar-test-push-btn" onclick="FutureRadar.testPush()" style="width:100%; padding: 10px; background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s;">
     📨 发送测试消息（验证是否通畅）
@@ -9433,6 +9439,17 @@ const current = (this.sortMode && this.sortMode[key]) ? this.sortMode[key] : 'pr
 
     // 保留兼容旧方法名
     onFormatImportTypeChange() { /* 已废弃，保留避免报错 */ }
+
+    savePushToken() {
+        const token = document.getElementById('radar-push-token').value.trim();
+        if (!token) { alert('请先填写 PushPlus Token'); return; }
+        const oldToken = this.pushConfig.token;
+        this.pushConfig.token = token;
+        if (token !== oldToken) this.pushConfig.lastCheck = '';
+        __tpi_ls_set(this.pushKey, JSON.stringify(this.pushConfig));
+        this.showSimpleNotification('✅ PushPlus Token 已保存', 'success');
+        if (token !== oldToken) { setTimeout(() => this.checkPushOnLoad(), 500); }
+    }
 
     saveSettings() {
         // 保存PushPlus配置
