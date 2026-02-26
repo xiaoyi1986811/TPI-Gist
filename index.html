@@ -7474,7 +7474,12 @@ window.exportAsCSV = function() {
     <input id="radar-worker-url" type="text"
       placeholder="https://tpi-reminder-worker.你的账号.workers.dev"
       style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:6px; font-size:13px;"/>
-    <p style="margin-top:6px; font-size:12px; color:#6b7280;">
+    
+    <div style="margin-top:10px; display:flex; align-items:center; gap:8px; font-size:13px;">
+      <input id="radar-worker-force" type="checkbox" style="transform:scale(1.05);" />
+      <label for="radar-worker-force" style="cursor:pointer;">强制重发（跳过去重，仅用于手动触发）</label>
+    </div>
+<p style="margin-top:6px; font-size:12px; color:#6b7280;">
       部署 Worker 后将其 URL 填入此处，即可实现关闭网页也能收到推送
     </p>
   </div>
@@ -9485,7 +9490,9 @@ const current = (this.sortMode && this.sortMode[key]) ? this.sortMode[key] : 'pr
         if (!urlEl || !statusEl) return;
         const url = urlEl.value.trim();
         if (!url) { statusEl.innerHTML = '<span style="color:#ef4444">请先输入 Worker URL</span>'; return; }
-        statusEl.innerHTML = '<span style="color:#6b7280">连接中...</span>';
+        
+        const __tpi_force = !!document.getElementById('radar-worker-force')?.checked;
+statusEl.innerHTML = '<span style="color:#6b7280">连接中...</span>';
         try {
             const resp = await fetch(url + '/status');
             if (resp.ok) {
@@ -9753,6 +9760,7 @@ window.FutureRadar = FutureRadar; // 暴露给插件使用
       if (!url) { this._workerStatusBanner('⚠️ 请先填写 Worker URL', 'error'); return; }
       if (!url.startsWith('https://')) { this._workerStatusBanner('⚠️ URL 必须以 https:// 开头', 'error'); return; }
       __tpi_ls_set('tpi_radar_worker_url', url);
+            try { __tpi_ls_set('tpi_radar_worker_force', !!document.getElementById('radar-worker-force')?.checked); } catch(e) {}
       this._workerStatusBanner('✅ Worker URL 已保存：' + url, 'success');
       this.showSimpleNotification && this.showSimpleNotification('✅ Worker 配置已保存', 'success');
     };
